@@ -35,16 +35,30 @@ subcarpeta: `https://usuario.github.io/mis-gastos/`. No se publica en la App Sto
 - `manifest.json` — PWA standalone.
 - `icons/` — `icon-180.png` (apple-touch-icon), `icon-512.png`, `splash-1290x2796.png`.
 
-## Modelo de datos
+## Modelo de datos (IndexedDB versión 2)
 
 - Movimiento: `{ id, tipo: 'gasto'|'ingreso', centavos (entero), categoria, descripcion,
-  fecha 'AAAA-MM-DD', tieneFoto, creado (ms), actualizado (ms) }`.
+  fecha 'AAAA-MM-DD', numFotos, creado (ms), actualizado (ms) }`.
   Los montos se guardan en **centavos enteros** para evitar errores de redondeo.
-- Foto: store `fotos` con `{ id (= id del movimiento), tipo, datos: ArrayBuffer }`,
-  JPEG de máx. 1200 px de lado y calidad 0.7.
-- Respaldo JSON: `{ app: 'mis-gastos', formato: 1, exportado, movimientos: [...] }`, cada
-  movimiento con `foto` como data URL base64 o `null`. Al importar se deduplica por `id`
-  (solo se reemplaza si el del archivo tiene `actualizado` más reciente).
+- Fotos: store `imagenes` con `{ id, movId, orden, tipo, datos: ArrayBuffer }` (índice `movId`),
+  hasta 10 por movimiento, JPEG de máx. 1200 px de lado y calidad 0.7.
+- Ajustes (store `ajustes`, `{ clave, valor }`): `presupuestos` (`{ categoria: centavos }`),
+  `ultimoRespaldo` (ms), `recordatorioPospuesto` (ms).
+- La v1 tenía una sola foto (store `fotos`, campo `tieneFoto`); `migrar()` en `js/db.js` la
+  convierte a v2. **Nunca borrar esa migración**: puede haber datos v1 en el iPhone.
+- Respaldo JSON: `{ app: 'mis-gastos', formato: 2, exportado, presupuestos, movimientos: [...] }`,
+  cada movimiento con `fotos: [dataURL base64, ...]`. La importación también acepta el formato 1
+  (`foto`: una data URL o `null`). Se deduplica por `id` (solo se reemplaza si el del archivo
+  tiene `actualizado` más reciente).
+- CSV (solo lectura en Excel/Numbers): separador `;`, decimales con coma, con BOM UTF-8.
+
+## Funciones principales
+
+Vista por mes (deslizar o flechas), búsqueda y filtro por tipo (en el mes o en todos los meses),
+estadísticas (promedio diario, proyección, mayor gasto, tasa de ahorro, dona por categoría,
+barras de 6 meses), presupuestos por categoría con aviso al superarlos, varias fotos por
+movimiento con visor en carrusel, duplicar movimiento, recordatorio de respaldo (7 días),
+exportar JSON/CSV con la hoja de compartir de iOS e importar respaldo.
 
 ## Probar en local
 

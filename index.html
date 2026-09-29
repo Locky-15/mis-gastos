@@ -44,6 +44,18 @@
     </header>
 
     <main id="contenido" class="contenido">
+      <div id="aviso-respaldo" class="aviso" hidden>
+        <div class="aviso-icono" aria-hidden="true">☁️</div>
+        <div class="aviso-texto">
+          <strong>Haz un respaldo</strong>
+          <span id="aviso-respaldo-texto"></span>
+        </div>
+        <button type="button" id="aviso-respaldo-ir" class="aviso-btn">Respaldar</button>
+        <button type="button" id="aviso-respaldo-cerrar" class="aviso-cerrar" aria-label="Recordar más tarde">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
       <section class="resumen">
         <div class="balance-etq">Balance del mes</div>
         <div id="balance" class="balance">$0,00</div>
@@ -51,20 +63,46 @@
           <div class="resumen-item">
             <div class="etq"><span class="flecha ingreso"><svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span>Ingresos</div>
             <div id="total-ingresos" class="valor ingreso">$0,00</div>
+            <div id="comp-ingresos" class="comparacion"></div>
           </div>
           <div class="resumen-item">
             <div class="etq"><span class="flecha gasto"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>Gastos</div>
             <div id="total-gastos" class="valor gasto">$0,00</div>
+            <div id="comp-gastos" class="comparacion"></div>
           </div>
         </div>
+        <button type="button" id="resumen-presupuesto" class="resumen-presupuesto" hidden>
+          <span class="rp-texto"><span>Presupuesto</span><span id="rp-valor"></span></span>
+          <span class="progreso"><span id="rp-barra"></span></span>
+        </button>
       </section>
 
       <div class="segmentado pestanas" id="pestanas" role="tablist">
         <button type="button" class="activo" data-vista="lista" role="tab">Movimientos</button>
-        <button type="button" data-vista="categorias" role="tab">Por categoría</button>
+        <button type="button" data-vista="categorias" role="tab">Estadísticas</button>
       </div>
 
-      <section id="vista-lista"><div id="lista"></div></section>
+      <section id="vista-lista">
+        <div class="filtros">
+          <label class="buscador">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>
+            <input id="buscar" type="search" placeholder="Buscar descripción, categoría o monto" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false">
+            <button type="button" id="buscar-limpiar" class="buscar-limpiar" aria-label="Borrar búsqueda" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l8 8M16 8l-8 8"/></svg>
+            </button>
+          </label>
+          <div class="filtros-fila">
+            <div class="segmentado mini" id="filtro-tipo">
+              <button type="button" data-filtro="todos" class="activo">Todos</button>
+              <button type="button" data-filtro="gasto">Gastos</button>
+              <button type="button" data-filtro="ingreso">Ingresos</button>
+            </div>
+            <button type="button" id="buscar-global" class="pastilla" hidden>Todos los meses</button>
+          </div>
+        </div>
+        <div id="info-filtro" class="info-filtro" hidden></div>
+        <div id="lista"></div>
+      </section>
       <section id="vista-categorias" hidden><div id="grafico"></div></section>
     </main>
 
@@ -108,27 +146,45 @@
           </label>
         </div>
 
-        <div class="grupo-titulo">Foto del ticket</div>
-        <div id="f-foto-preview" class="foto-preview" hidden>
-          <button type="button" id="f-foto-ver" class="foto-ver" aria-label="Ver foto en grande">
-            <img id="f-foto-img" alt="Foto del ticket">
-          </button>
-          <button type="button" id="f-foto-quitar" class="foto-quitar">Quitar foto</button>
-        </div>
+        <div class="grupo-titulo fotos-titulo"><span>Fotos del ticket</span><span id="f-fotos-cuenta"></span></div>
+        <div id="f-fotos" class="fotos-grid" hidden></div>
         <div class="foto-botones">
-          <label class="boton-sec">
+          <label class="boton-sec" id="f-camara-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
             Cámara
             <input type="file" accept="image/*" capture="environment" id="f-camara" class="oculto">
           </label>
-          <label class="boton-sec">
+          <label class="boton-sec" id="f-galeria-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg>
             Galería
-            <input type="file" accept="image/*" id="f-galeria" class="oculto">
+            <input type="file" accept="image/*" multiple id="f-galeria" class="oculto">
           </label>
         </div>
+        <p class="nota">Puedes agregar hasta 10 fotos. En Galería puedes elegir varias a la vez.</p>
 
+        <button type="button" id="f-duplicar" class="boton-sec ancho separado" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg>
+          Duplicar como nuevo
+        </button>
         <button type="button" id="f-eliminar" class="boton-peligro" hidden>Eliminar movimiento</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Hoja: presupuestos -->
+  <div id="hoja-presupuestos" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <form class="hoja" id="form-presupuestos" novalidate autocomplete="off">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <button type="button" class="texto-btn" data-cerrar>Cancelar</button>
+        <h2>Presupuestos</h2>
+        <button type="submit" class="texto-btn fuerte">Guardar</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <p class="nota sin-sangria">Límite de gasto mensual para cada categoría. Déjalo vacío si no quieres límite. Se aplica a todos los meses.</p>
+        <div class="grupo" id="lista-presupuestos"></div>
+        <p id="total-presupuestos" class="nota"></p>
       </div>
     </form>
   </div>
@@ -150,8 +206,11 @@
           <div class="campo"><span>Último respaldo</span><span id="aj-ultimo" class="dato">Nunca</span></div>
         </div>
 
-        <button type="button" id="aj-exportar" class="boton-primario">Exportar respaldo</button>
-        <button type="button" id="aj-compartir" class="boton-primario verde" hidden>Guardar respaldo…</button>
+        <div id="aj-botones-exportar">
+          <button type="button" id="aj-exportar" class="boton-primario">Exportar respaldo completo</button>
+          <button type="button" id="aj-csv" class="boton-sec ancho">Exportar a Excel (CSV)</button>
+        </div>
+        <button type="button" id="aj-compartir" class="boton-primario verde" hidden>Guardar archivo…</button>
         <p id="aj-estado" class="nota" hidden></p>
 
         <label class="boton-sec ancho">
@@ -159,15 +218,16 @@
           <input type="file" id="aj-importar" class="oculto">
         </label>
 
-        <p class="nota">Tus datos solo existen en este iPhone. Exporta un respaldo con frecuencia y guárdalo en Archivos o iCloud Drive. Al importar, los movimientos que ya existen no se duplican.</p>
+        <p class="nota">Tus datos solo existen en este iPhone. Exporta un respaldo con frecuencia y guárdalo en Archivos o iCloud Drive. El respaldo completo incluye las fotos; el CSV es solo para ver tus movimientos en Excel o Numbers. Al importar, los movimientos que ya existen no se duplican.</p>
         <p id="aj-version" class="nota centro"></p>
       </div>
     </div>
   </div>
 
-  <!-- Visor de foto -->
+  <!-- Visor de fotos (carrusel) -->
   <div id="visor" class="visor" hidden>
-    <div id="visor-scroll" class="visor-scroll"><img id="visor-img" alt="Foto del ticket"></div>
+    <div id="visor-carrusel" class="visor-carrusel"></div>
+    <div id="visor-contador" class="visor-contador"></div>
     <button type="button" id="visor-cerrar" class="visor-cerrar" aria-label="Cerrar">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>

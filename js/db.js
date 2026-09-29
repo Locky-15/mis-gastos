@@ -1,35 +1,67 @@
 /* ==========================================================
    Capa de datos (IndexedDB)
 
-   Almacenes:
+   Almacenes (versión 2):
    - movimientos: { id, tipo, centavos, categoria, descripcion, fecha 'AAAA-MM-DD',
-                    tieneFoto, creado, actualizado }   (índice: fecha)
-   - fotos:       { id (= id del movimiento), tipo 'image/jpeg', datos ArrayBuffer }
+                    numFotos, creado, actualizado }   (índice: fecha)
+   - imagenes:    { id, movId, orden, tipo 'image/jpeg', datos ArrayBuffer }  (índice: movId)
    - ajustes:     { clave, valor }
+
+   Historial:
+   - v1: una sola foto por movimiento en el almacén "fotos" (clave = id del movimiento)
+         y el campo "tieneFoto" en el movimiento.
+   - v2: varias fotos por movimiento en "imagenes"; "tieneFoto" pasa a "numFotos".
    ========================================================== */
 'use strict';
 
 const DB = (() => {
   const NOMBRE = 'mis-gastos';
-  const VERSION = 1;
+  const VERSION = 2;
   let conexion = null;
+
+  function migrar(db, tx, anterior) {
+    if (anterior < 1) {
+      db.createObjectStore('movimientos', { keyPath: 'id' }).createIndex('fecha', 'fecha');
+      db.createObjectStore('ajustes', { keyPath: 'clave' });
+    }
+    if (anterior < 2) {
+      const imagenes = db.createObjectStore('imagenes', { keyPath: 'id' });
+      imagenes.createIndex('movId', 'movId');
+
+      // Pasa las fotos de v1 al nuevo almacén sin perder ninguna
+      if (db.objectStoreNames.contains('fotos')) {
+        tx.objectStore('fotos').openCursor().onsuccess = e => {
+          const c = e.target.result;
+          if (c) {
+            const f = c.value;
+            imagenes.put({ id: `${f.id}-1`, movId: f.id, orden: 0, tipo: f.tipo || 'image/jpeg', datos: f.datos });
+            c.continue();
+          } else {
+            db.deleteObjectStore('fotos');
+          }
+        };
+      }
+      if (anterior >= 1) {
+        tx.objectStore('movimientos').openCursor().onsuccess = e => {
+          const c = e.target.result;
+          if (!c) return;
+          const m = c.value;
+          if ('tieneFoto' in m) {
+            m.numFotos = m.tieneFoto ? 1 : 0;
+            delete m.tieneFoto;
+            c.update(m);
+          }
+          c.continue();
+        };
+      }
+    }
+  }
 
   function abrir() {
     if (conexion) return conexion;
     conexion = new Promise((resolve, reject) => {
       const req = indexedDB.open(NOMBRE, VERSION);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains('movimientos')) {
-          db.createObjectStore('movimientos', { keyPath: 'id' }).createIndex('fecha', 'fecha');
-        }
-        if (!db.objectStoreNames.contains('fotos')) {
-          db.createObjectStore('fotos', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('ajustes')) {
-          db.createObjectStore('ajustes', { keyPath: 'clave' });
-        }
-      };
+      req.onupgradeneeded = e => migrar(req.result, req.transaction, e.oldVersion);
       req.onsuccess = () => {
         const db = req.result;
         db.onversionchange = () => { db.close(); conexion = null; };
@@ -37,6 +69,7 @@ const DB = (() => {
         resolve(db);
       };
       req.onerror = () => { conexion = null; reject(req.error); };
+      req.onblocked = () => console.warn('IndexedDB: actualización bloqueada por otra pestaña abierta');
     });
     return conexion;
   }
@@ -65,6 +98,15 @@ const DB = (() => {
     }
   }
 
+  /** Borra todas las imágenes de un movimiento y guarda las nuevas (en ese orden). */
+  function reemplazarImagenes(store, movId, nuevas) {
+    // Se leen las claves primero para no borrar por error las imágenes recién agregadas
+    store.index('movId').getAllKeys(IDBKeyRange.only(movId)).onsuccess = e => {
+      for (const k of e.target.result) store.delete(k);
+      for (const img of nuevas) store.put(img);
+    };
+  }
+
   function movimientosEntre(desde, hasta) {
     return conReintento(db => pedir(
       db.transaction('movimientos').objectStore('movimientos')
@@ -80,33 +122,39 @@ const DB = (() => {
     return conReintento(db => pedir(db.transaction('movimientos').objectStore('movimientos').count()));
   }
 
-  function obtenerFoto(id) {
-    return conReintento(db => pedir(db.transaction('fotos').objectStore('fotos').get(id)));
+  async function imagenesDe(movId) {
+    const lista = await conReintento(db => pedir(
+      db.transaction('imagenes').objectStore('imagenes').index('movId').getAll(IDBKeyRange.only(movId))
+    ));
+    return lista.sort((a, b) => a.orden - b.orden);
   }
 
-  function todasLasFotos() {
-    return conReintento(db => pedir(db.transaction('fotos').objectStore('fotos').getAll()));
+  function todasLasImagenes() {
+    return conReintento(db => pedir(db.transaction('imagenes').objectStore('imagenes').getAll()));
   }
 
   /**
    * Guarda un movimiento.
-   * foto: undefined = no tocar la foto, null = borrarla, { tipo, datos } = reemplazarla.
+   * cambios (opcional): { nuevas: [{ id, movId, orden, tipo, datos }], eliminar: [idImagen] }
    */
-  function guardar(mov, foto) {
+  function guardar(mov, cambios) {
     return conReintento(db => {
-      const tx = db.transaction(['movimientos', 'fotos'], 'readwrite');
+      const tx = db.transaction(['movimientos', 'imagenes'], 'readwrite');
       tx.objectStore('movimientos').put(mov);
-      if (foto === null) tx.objectStore('fotos').delete(mov.id);
-      else if (foto) tx.objectStore('fotos').put({ id: mov.id, tipo: foto.tipo, datos: foto.datos });
+      if (cambios) {
+        const si = tx.objectStore('imagenes');
+        for (const id of cambios.eliminar || []) si.delete(id);
+        for (const img of cambios.nuevas || []) si.put(img);
+      }
       return terminar(tx);
     });
   }
 
   function eliminar(id) {
     return conReintento(db => {
-      const tx = db.transaction(['movimientos', 'fotos'], 'readwrite');
+      const tx = db.transaction(['movimientos', 'imagenes'], 'readwrite');
       tx.objectStore('movimientos').delete(id);
-      tx.objectStore('fotos').delete(id);
+      reemplazarImagenes(tx.objectStore('imagenes'), id, []);
       return terminar(tx);
     });
   }
@@ -114,15 +162,15 @@ const DB = (() => {
   /**
    * Importa movimientos sin duplicar: se identifican por id.
    * Si ya existe, solo se reemplaza cuando el del respaldo es más reciente (campo "actualizado").
-   * items: [{ mov, foto: { tipo, datos } | null }]
+   * items: [{ mov, fotos: [{ tipo, datos }] }]
    */
   function importar(items) {
     return conReintento(db => {
       const res = { nuevos: 0, actualizados: 0, omitidos: 0 };
-      const tx = db.transaction(['movimientos', 'fotos'], 'readwrite');
+      const tx = db.transaction(['movimientos', 'imagenes'], 'readwrite');
       const sm = tx.objectStore('movimientos');
-      const sf = tx.objectStore('fotos');
-      for (const { mov, foto } of items) {
+      const si = tx.objectStore('imagenes');
+      for (const { mov, fotos } of items) {
         const req = sm.get(mov.id);
         req.onsuccess = () => {
           const existente = req.result;
@@ -132,8 +180,9 @@ const DB = (() => {
           }
           if (existente) res.actualizados++; else res.nuevos++;
           sm.put(mov);
-          if (foto) sf.put({ id: mov.id, tipo: foto.tipo, datos: foto.datos });
-          else sf.delete(mov.id);
+          reemplazarImagenes(si, mov.id, fotos.map((f, i) => ({
+            id: `${mov.id}-${i + 1}`, movId: mov.id, orden: i, tipo: f.tipo, datos: f.datos,
+          })));
         };
       }
       return terminar(tx).then(() => res);
@@ -154,7 +203,7 @@ const DB = (() => {
   }
 
   return {
-    movimientosEntre, todos, contar, obtenerFoto, todasLasFotos,
+    movimientosEntre, todos, contar, imagenesDe, todasLasImagenes,
     guardar, eliminar, importar, leerAjuste, guardarAjuste,
   };
 })();
