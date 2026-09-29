@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- iOS: app a pantalla completa -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mis Gastos">
+
+  <title>Mis Gastos</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <!-- Pantalla de carga para iPhone 14 Pro Max (430x932 @3x) -->
+  <link rel="apple-touch-startup-image"
+        media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
+        href="icons/splash-1290x2796.png">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="barra" id="barra">
+      <button type="button" id="btn-hoy" class="texto-btn barra-izq" hidden>Hoy</button>
+      <div class="mes-nav">
+        <button type="button" id="btn-anterior" class="icono-btn" aria-label="Mes anterior">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h1 id="titulo-mes" class="titulo-mes">&nbsp;</h1>
+        <button type="button" id="btn-siguiente" class="icono-btn" aria-label="Mes siguiente">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <button type="button" id="btn-ajustes" class="icono-btn barra-der" aria-label="Respaldo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M7.5 7.5L12 3l4.5 4.5M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12"/></svg>
+      </button>
+    </header>
+
+    <main id="contenido" class="contenido">
+      <section class="resumen">
+        <div class="balance-etq">Balance del mes</div>
+        <div id="balance" class="balance">$0,00</div>
+        <div class="resumen-fila">
+          <div class="resumen-item">
+            <div class="etq"><span class="flecha ingreso"><svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span>Ingresos</div>
+            <div id="total-ingresos" class="valor ingreso">$0,00</div>
+          </div>
+          <div class="resumen-item">
+            <div class="etq"><span class="flecha gasto"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>Gastos</div>
+            <div id="total-gastos" class="valor gasto">$0,00</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="segmentado pestanas" id="pestanas" role="tablist">
+        <button type="button" class="activo" data-vista="lista" role="tab">Movimientos</button>
+        <button type="button" data-vista="categorias" role="tab">Por categoría</button>
+      </div>
+
+      <section id="vista-lista"><div id="lista"></div></section>
+      <section id="vista-categorias" hidden><div id="grafico"></div></section>
+    </main>
+
+    <button type="button" id="btn-agregar" class="fab" aria-label="Agregar movimiento">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+
+  <!-- Hoja: nuevo / editar movimiento -->
+  <div id="hoja-form" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <form class="hoja" id="form-mov" novalidate autocomplete="off">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <button type="button" class="texto-btn" data-cerrar>Cancelar</button>
+        <h2 id="form-titulo">Nuevo movimiento</h2>
+        <button type="submit" id="f-guardar" class="texto-btn fuerte">Guardar</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="segmentado" id="f-tipo">
+          <button type="button" data-tipo="gasto" class="activo">Gasto</button>
+          <button type="button" data-tipo="ingreso">Ingreso</button>
+        </div>
+
+        <label class="monto-grande gasto" id="f-monto-caja">
+          <span class="moneda">$</span>
+          <input id="f-monto" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="done" aria-label="Monto">
+        </label>
+
+        <div class="grupo-titulo">Categoría</div>
+        <div id="f-categorias" class="categorias-grid"></div>
+
+        <div class="grupo">
+          <label class="campo">
+            <span>Descripción</span>
+            <input id="f-desc" type="text" placeholder="Opcional" maxlength="120" enterkeyhint="done">
+          </label>
+          <label class="campo">
+            <span>Fecha</span>
+            <input id="f-fecha" type="date">
+          </label>
+        </div>
+
+        <div class="grupo-titulo">Foto del ticket</div>
+        <div id="f-foto-preview" class="foto-preview" hidden>
+          <button type="button" id="f-foto-ver" class="foto-ver" aria-label="Ver foto en grande">
+            <img id="f-foto-img" alt="Foto del ticket">
+          </button>
+          <button type="button" id="f-foto-quitar" class="foto-quitar">Quitar foto</button>
+        </div>
+        <div class="foto-botones">
+          <label class="boton-sec">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            Cámara
+            <input type="file" accept="image/*" capture="environment" id="f-camara" class="oculto">
+          </label>
+          <label class="boton-sec">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg>
+            Galería
+            <input type="file" accept="image/*" id="f-galeria" class="oculto">
+          </label>
+        </div>
+
+        <button type="button" id="f-eliminar" class="boton-peligro" hidden>Eliminar movimiento</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Hoja: respaldo -->
+  <div id="hoja-ajustes" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja hoja-corta">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <span></span>
+        <h2>Respaldo</h2>
+        <button type="button" class="texto-btn fuerte" data-cerrar>Listo</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="grupo">
+          <div class="campo"><span>Movimientos guardados</span><span id="aj-total" class="dato">—</span></div>
+          <div class="campo"><span>Espacio usado</span><span id="aj-espacio" class="dato">—</span></div>
+          <div class="campo"><span>Último respaldo</span><span id="aj-ultimo" class="dato">Nunca</span></div>
+        </div>
+
+        <button type="button" id="aj-exportar" class="boton-primario">Exportar respaldo</button>
+        <button type="button" id="aj-compartir" class="boton-primario verde" hidden>Guardar respaldo…</button>
+        <p id="aj-estado" class="nota" hidden></p>
+
+        <label class="boton-sec ancho">
+          Importar respaldo
+          <input type="file" id="aj-importar" class="oculto">
+        </label>
+
+        <p class="nota">Tus datos solo existen en este iPhone. Exporta un respaldo con frecuencia y guárdalo en Archivos o iCloud Drive. Al importar, los movimientos que ya existen no se duplican.</p>
+        <p id="aj-version" class="nota centro"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visor de foto -->
+  <div id="visor" class="visor" hidden>
+    <div id="visor-scroll" class="visor-scroll"><img id="visor-img" alt="Foto del ticket"></div>
+    <button type="button" id="visor-cerrar" class="visor-cerrar" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <!-- Alerta estilo iOS -->
+  <div id="alerta" class="alerta-contenedor" hidden>
+    <div class="alerta" role="alertdialog" aria-labelledby="alerta-titulo" aria-describedby="alerta-mensaje">
+      <div class="alerta-texto">
+        <h3 id="alerta-titulo"></h3>
+        <p id="alerta-mensaje"></p>
+      </div>
+      <div class="alerta-botones">
+        <button type="button" id="alerta-cancelar">Cancelar</button>
+        <button type="button" id="alerta-aceptar">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
