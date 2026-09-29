@@ -5,7 +5,7 @@
    ========================================================== */
 'use strict';
 
-const CACHE = 'mis-gastos-v2';
+const CACHE = 'mis-gastos-v3';
 const PREFIJO = 'mis-gastos-';
 
 const ARCHIVOS = [

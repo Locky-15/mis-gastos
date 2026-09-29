@@ -114,6 +114,10 @@ const DB = (() => {
     ));
   }
 
+  function obtener(id) {
+    return conReintento(db => pedir(db.transaction('movimientos').objectStore('movimientos').get(id)));
+  }
+
   function todos() {
     return conReintento(db => pedir(db.transaction('movimientos').objectStore('movimientos').getAll()));
   }
@@ -203,7 +207,7 @@ const DB = (() => {
   }
 
   return {
-    movimientosEntre, todos, contar, imagenesDe, todasLasImagenes,
+    movimientosEntre, obtener, todos, contar, imagenesDe, todasLasImagenes,
     guardar, eliminar, importar, leerAjuste, guardarAjuste,
   };
 })();

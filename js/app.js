@@ -68,6 +68,7 @@
 
   const form = {
     id: null,
+    idPreset: null, // id fijo para un movimiento nuevo (compras de Apple Pay, evita duplicados)
     tipo: 'gasto',
     categoria: null,
     creado: null,
@@ -589,7 +590,8 @@
   }
 
   function hayModalAbierto() {
-    return ['#hoja-form', '#hoja-ajustes', '#hoja-presupuestos', '#visor', '#alerta'].some(s => !$(s).hidden);
+    return ['#hoja-form', '#hoja-ajustes', '#hoja-presupuestos', '#hoja-applepay', '#hoja-pegar', '#hoja-ayuda-ap', '#visor', '#alerta']
+      .some(s => !$(s).hidden);
   }
 
   function habilitarArrastre(contenedor, alCerrar) {
@@ -655,21 +657,27 @@
 
   // ---------- Formulario ----------
 
-  function abrirFormulario(mov) {
+  /**
+   * mov: movimiento existente a editar (o null para uno nuevo).
+   * preset: datos iniciales para uno nuevo { id, tipo, centavos, categoria, descripcion, fecha }.
+   */
+  function abrirFormulario(mov, preset) {
     limpiarFotosForm();
     const sesion = ++form.sesion;
+    const datos = mov || preset || null;
     form.id = mov ? mov.id : null;
+    form.idPreset = !mov && preset ? preset.id || null : null;
     form.creado = mov ? mov.creado : null;
-    form.categoria = mov ? mov.categoria : null;
+    form.categoria = datos ? datos.categoria || null : null;
     form.guardando = false;
     form.cargaFotos = Promise.resolve();
 
     $('#form-titulo').textContent = mov ? 'Editar movimiento' : 'Nuevo movimiento';
-    ponerTipo(mov ? mov.tipo : 'gasto');
-    $('#f-monto').value = mov ? centavosATexto(mov.centavos) : '';
+    ponerTipo(datos ? datos.tipo || 'gasto' : 'gasto');
+    $('#f-monto').value = datos && datos.centavos ? centavosATexto(datos.centavos) : '';
     ajustarAnchoMonto();
-    $('#f-desc').value = mov ? mov.descripcion || '' : '';
-    $('#f-fecha').value = mov ? mov.fecha : hoyISO();
+    $('#f-desc').value = datos ? datos.descripcion || '' : '';
+    $('#f-fecha').value = datos && datos.fecha ? datos.fecha : hoyISO();
     $('#f-eliminar').hidden = !mov;
     $('#f-duplicar').hidden = !mov;
     $('#f-guardar').disabled = false;
@@ -707,16 +715,17 @@
     renderCategoriasForm();
   }
 
+  function htmlChipCategoria(c, activo, claseExtra = '') {
+    const estilo = activo ? ` style="border-color:${c.color};background:${c.color}22"` : '';
+    return `<button type="button" class="cat-chip${activo ? ' activo' : ''}${claseExtra}" data-cat="${escapar(c.id)}"${estilo}>`
+      + `<span class="mov-icono" style="background:${c.color}33">${c.emoji}</span>${escapar(c.id)}</button>`;
+  }
+
   function renderCategoriasForm() {
     const lista = CATEGORIAS[form.tipo];
     const grid = $('#f-categorias');
     grid.classList.toggle('cuatro', lista.length === 4);
-    grid.innerHTML = lista.map(c => {
-      const activo = c.id === form.categoria;
-      const estilo = activo ? ` style="border-color:${c.color};background:${c.color}22"` : '';
-      return `<button type="button" class="cat-chip${activo ? ' activo' : ''}" data-cat="${escapar(c.id)}"${estilo}>`
-        + `<span class="mov-icono" style="background:${c.color}33">${c.emoji}</span>${escapar(c.id)}</button>`;
-    }).join('');
+    grid.innerHTML = lista.map(c => htmlChipCategoria(c, c.id === form.categoria)).join('');
   }
 
   function ajustarAnchoMonto() {
@@ -872,7 +881,7 @@
     try {
       await form.cargaFotos; // asegura que las fotos existentes ya estén en la lista
       const mov = {
-        id: form.id || nuevoId(),
+        id: form.id || form.idPreset || nuevoId(),
         tipo: form.tipo,
         centavos,
         categoria: form.categoria,
@@ -909,6 +918,7 @@
     limpiarFotosForm();
     form.sesion++;
     form.id = null;
+    form.idPreset = null;
     form.creado = null;
     form.cargaFotos = Promise.resolve();
     $('#form-titulo').textContent = 'Nuevo (copia)';
@@ -1040,6 +1050,206 @@
     ocultar($('#hoja-presupuestos'));
     renderTodo();
     toast('Presupuestos guardados');
+  }
+
+  // ---------- Compras de Apple Pay (app Atajos + portapapeles) ----------
+  // Las web apps no pueden leer los pagos de Wallet. Una automatización de Atajos
+  // ("Transacción") copia cada compra al portapapeles con este formato de línea:
+  //   MISGASTOS;<importe>;<AAAA-MM-DD HH:mm>;<comercio>
+  // y aquí se lee con un toque en el botón de la tarjeta.
+
+  const RE_APPLEPAY = /^\s*MISGASTOS\s*;([^;]*);([^;]*);(.*)$/i;
+  const MAX_OMITIDOS = 300;
+  const applePay = { cola: [], indice: 0, guardadas: 0, ocupado: false, sugerencias: new Map() };
+
+  const claveComercio = s => normalizarTexto(s).replace(/\s+/g, ' ').trim();
+
+  function parsearFechaAtajo(texto) {
+    const s = String(texto).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if (m) return { fecha: `${m[1]}-${m[2]}-${m[3]}`, hora: m[4] ? `${dos(m[4])}:${m[5]}` : '' };
+    const d = s ? new Date(s) : null;
+    if (d && !Number.isNaN(d.getTime())) return { fecha: aISO(d), hora: `${dos(d.getHours())}:${dos(d.getMinutes())}` };
+    return { fecha: hoyISO(), hora: '' };
+  }
+
+  function leerComprasApplePay(texto) {
+    const compras = [];
+    const vistos = new Set();
+    for (const linea of String(texto).split(/\r?\n/)) {
+      const m = linea.match(RE_APPLEPAY);
+      if (!m) continue;
+      const centavos = parsearMonto(m[1]);
+      if (!(centavos > 0) || centavos > MAX_CENTAVOS) continue;
+      const { fecha, hora } = parsearFechaAtajo(m[2]);
+      const comercio = m[3].trim().slice(0, 120);
+      // id estable: la misma compra pegada dos veces no se duplica
+      const id = 'ap-' + hashTexto(`${centavos}|${m[2].trim()}|${claveComercio(comercio)}`);
+      if (vistos.has(id)) continue;
+      vistos.add(id);
+      compras.push({ id, centavos, fecha, hora, comercio });
+    }
+    return compras;
+  }
+
+  async function pegarCompraApplePay() {
+    let texto = null;
+    try {
+      // iOS muestra la burbuja "Pegar" para confirmar
+      if (navigator.clipboard && navigator.clipboard.readText) texto = await navigator.clipboard.readText();
+    } catch (err) {
+      texto = null;
+    }
+    if (texto === null) {
+      abrirPegarManual('No se pudo leer el portapapeles. Pega aquí la compra que copió el atajo:');
+      return;
+    }
+    procesarTextoApplePay(texto);
+  }
+
+  function abrirPegarManual(mensaje) {
+    $('#pegar-mensaje').textContent = mensaje;
+    $('#pegar-texto').value = '';
+    mostrar($('#hoja-pegar'));
+  }
+
+  async function sugerenciasPorComercio() {
+    const mapa = new Map();
+    const gastos = (await DB.todos())
+      .filter(m => m.tipo === 'gasto' && m.descripcion)
+      .sort((a, b) => (a.actualizado || 0) - (b.actualizado || 0));
+    for (const m of gastos) mapa.set(claveComercio(m.descripcion), m.categoria); // gana la más reciente
+    return mapa;
+  }
+
+  async function procesarTextoApplePay(texto) {
+    const compras = leerComprasApplePay(texto);
+    if (!compras.length) {
+      abrirPegarManual('No encontré compras de Apple Pay copiadas. Si ya configuraste el atajo, paga y vuelve a tocar el botón de la tarjeta. Si no, mira cómo configurarlo.');
+      return;
+    }
+    try {
+      const omitidos = new Set((await DB.leerAjuste('applePayOmitidos')) || []);
+      const pendientes = [];
+      for (const c of compras) {
+        if (omitidos.has(c.id) || await DB.obtener(c.id)) continue;
+        pendientes.push(c);
+      }
+      if (!pendientes.length) {
+        if (!$('#hoja-pegar').hidden) ocultar($('#hoja-pegar'));
+        toast(compras.length === 1 ? 'Esa compra ya está registrada' : 'Esas compras ya están registradas');
+        return;
+      }
+      applePay.sugerencias = await sugerenciasPorComercio();
+      applePay.cola = pendientes;
+      applePay.indice = 0;
+      applePay.guardadas = 0;
+      applePay.ocupado = false;
+      mostrarCompraApplePay();
+      if (!$('#hoja-pegar').hidden) ocultar($('#hoja-pegar'));
+      mostrar($('#hoja-applepay'));
+    } catch (err) {
+      console.error(err);
+      alerta('No se pudo leer la compra', String(err.message || err));
+    }
+  }
+
+  function sugeridaPara(compra) {
+    return compra.comercio ? applePay.sugerencias.get(claveComercio(compra.comercio)) || null : null;
+  }
+
+  function mostrarCompraApplePay() {
+    const c = applePay.cola[applePay.indice];
+    const total = applePay.cola.length;
+    $('#ap-contador').textContent = total > 1 ? `${applePay.indice + 1} de ${total}` : '';
+    $('#ap-monto').textContent = dinero(c.centavos);
+    $('#ap-comercio').textContent = c.comercio || 'Comercio sin nombre';
+    $('#ap-fecha').textContent = capitalizar(etiquetaDia(c.fecha)) + (c.hora ? ` · ${c.hora}` : '');
+    const sugerida = sugeridaPara(c);
+    $('#ap-categorias').innerHTML = CATEGORIAS.gasto
+      .map(cat => htmlChipCategoria(cat, cat.id === sugerida, cat.id === sugerida ? ' sugerida' : ''))
+      .join('');
+    $('.hoja-cuerpo', $('#hoja-applepay')).scrollTop = 0;
+  }
+
+  async function clasificarCompra(categoria) {
+    if (applePay.ocupado) return;
+    applePay.ocupado = true;
+    const c = applePay.cola[applePay.indice];
+    const momento = Date.now();
+    try {
+      await DB.guardar({
+        id: c.id, tipo: 'gasto', centavos: c.centavos, categoria, descripcion: c.comercio,
+        fecha: c.fecha, numFotos: 0, creado: momento, actualizado: momento,
+      });
+      if (c.comercio) applePay.sugerencias.set(claveComercio(c.comercio), categoria);
+      applePay.guardadas++;
+      siguienteCompra(`Guardado en ${categoria}`);
+    } catch (err) {
+      console.error(err);
+      alerta('No se pudo guardar', 'Puede que el almacenamiento del iPhone esté lleno.');
+    } finally {
+      applePay.ocupado = false;
+    }
+  }
+
+  async function omitirCompra() {
+    const c = applePay.cola[applePay.indice];
+    try {
+      const lista = (await DB.leerAjuste('applePayOmitidos')) || [];
+      lista.push(c.id);
+      await DB.guardarAjuste('applePayOmitidos', lista.slice(-MAX_OMITIDOS));
+    } catch (err) {
+      console.error(err);
+    }
+    siguienteCompra('Compra omitida');
+  }
+
+  function siguienteCompra(mensaje) {
+    applePay.indice++;
+    if (applePay.indice < applePay.cola.length) {
+      mostrarCompraApplePay();
+      toast(mensaje);
+      return;
+    }
+    cerrarApplePay();
+    toast(applePay.guardadas > 1 ? `${applePay.guardadas} compras guardadas` : mensaje);
+  }
+
+  function cerrarApplePay() {
+    ocultar($('#hoja-applepay'));
+    if (!applePay.guardadas) return;
+    // Muestra el mes de la última compra guardada
+    const ultima = applePay.cola[Math.min(applePay.indice, applePay.cola.length) - 1];
+    const [a, m] = ultima.fecha.split('-').map(Number);
+    if (a !== estado.anio || m - 1 !== estado.mes) irAMes(a, m - 1); else cargarMes();
+    revisarRecordatorio();
+  }
+
+  function editarCompraApplePay() {
+    const c = applePay.cola[applePay.indice];
+    const restantes = applePay.cola.length - applePay.indice - 1;
+    cerrarApplePay();
+    abrirFormulario(null, {
+      id: c.id, tipo: 'gasto', centavos: c.centavos, categoria: sugeridaPara(c), descripcion: c.comercio, fecha: c.fecha,
+    });
+    if (restantes) {
+      const faltan = restantes === 1 ? 'la compra que falta' : `las ${restantes} compras que faltan`;
+      toast(`Luego toca la tarjeta otra vez para ${faltan}`, 3800);
+    }
+  }
+
+  async function copiarCompraPrueba() {
+    const d = new Date();
+    const linea = `MISGASTOS;$1.00;${aISO(d)} ${dos(d.getHours())}:${dos(d.getMinutes())};Compra de prueba`;
+    try {
+      await navigator.clipboard.writeText(linea);
+      ocultar($('#hoja-ayuda-ap'));
+      if (!$('#hoja-pegar').hidden) ocultar($('#hoja-pegar'));
+      toast('Compra de prueba copiada: toca la tarjeta 💳 arriba', 3500);
+    } catch (err) {
+      alerta('No se pudo copiar', linea);
+    }
   }
 
   // ---------- Recordatorio de respaldo ----------
@@ -1514,6 +1724,36 @@
     $('#aj-csv').addEventListener('click', () => prepararExportacion('csv'));
     $('#aj-compartir').addEventListener('click', compartirExportacion);
     $('#aj-importar').addEventListener('change', importarArchivo);
+
+    // Apple Pay
+    $('#btn-applepay').addEventListener('click', pegarCompraApplePay);
+    const hojaAP = $('#hoja-applepay');
+    hojaAP.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) cerrarApplePay(); });
+    habilitarArrastre(hojaAP, cerrarApplePay);
+    $('#ap-categorias').addEventListener('click', e => {
+      const b = e.target.closest('.cat-chip');
+      if (b) clasificarCompra(b.dataset.cat);
+    });
+    $('#ap-editar').addEventListener('click', editarCompraApplePay);
+    $('#ap-omitir').addEventListener('click', omitirCompra);
+
+    const hojaPegar = $('#hoja-pegar');
+    const cerrarPegar = () => {
+      if (document.activeElement) document.activeElement.blur();
+      ocultar(hojaPegar);
+    };
+    hojaPegar.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) cerrarPegar(); });
+    habilitarArrastre(hojaPegar, cerrarPegar);
+    $('#pegar-procesar').addEventListener('click', () => {
+      if (document.activeElement) document.activeElement.blur();
+      procesarTextoApplePay($('#pegar-texto').value);
+    });
+    $('#pegar-ayuda').addEventListener('click', () => mostrar($('#hoja-ayuda-ap')));
+
+    const hojaAyuda = $('#hoja-ayuda-ap');
+    hojaAyuda.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) ocultar(hojaAyuda); });
+    habilitarArrastre(hojaAyuda, () => ocultar(hojaAyuda));
+    $('#ayuda-prueba').addEventListener('click', copiarCompraPrueba);
 
     // Visor
     const carrusel = $('#visor-carrusel');

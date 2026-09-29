@@ -95,7 +95,7 @@ svg { display: block; }
   height: calc(var(--sa-top) + var(--alto-barra));
   padding: var(--sa-top) calc(var(--sa-right) + 8px) 0 calc(var(--sa-left) + 8px);
   display: grid;
-  grid-template-columns: 64px 1fr 64px;
+  grid-template-columns: 88px 1fr 88px;
   align-items: center;
   background: rgba(0, 0, 0, 0.75);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -105,7 +105,7 @@ svg { display: block; }
 }
 .barra.con-borde { border-bottom-color: var(--sep); }
 .barra-izq { grid-column: 1; justify-self: start; padding-left: 8px; }
-.barra-der { grid-column: 3; justify-self: end; }
+.barra-der { grid-column: 3; justify-self: end; display: flex; }
 
 .mes-nav {
   grid-column: 2;
@@ -122,7 +122,7 @@ svg { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 150px;
+  min-width: 132px;
 }
 
 .icono-btn {
@@ -974,6 +974,74 @@ svg { display: block; }
 .campo-cat .mov-icono { width: 30px; height: 30px; font-size: 16px; border-radius: 8px; }
 .campo .prefijo { color: var(--texto2); flex: none; }
 .campo input.presupuesto { max-width: 130px; }
+
+/* ---------- Apple Pay ---------- */
+
+.barra-contador {
+  justify-self: end;
+  font-size: 14px;
+  color: var(--texto2);
+  font-variant-numeric: tabular-nums;
+}
+.ap-compra { text-align: center; padding: 8px 0 4px; }
+.ap-monto {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--rojo);
+  font-variant-numeric: tabular-nums;
+}
+.ap-comercio { font-size: 19px; font-weight: 600; margin-top: 4px; overflow-wrap: anywhere; }
+.ap-fecha { font-size: 14px; color: var(--texto2); margin-top: 3px; }
+.cat-chip.sugerida::after {
+  content: "Sugerida";
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--azul);
+  margin-top: -3px;
+}
+.ap-acciones {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 18px;
+}
+.boton-sec.rojo { color: var(--rojo); }
+
+.area-texto {
+  display: block;
+  width: 100%;
+  min-height: 90px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg3);
+  color: var(--texto);
+  font-size: 16px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+}
+.area-texto::placeholder { color: var(--texto3); }
+
+.ayuda { font-size: 15px; line-height: 1.5; color: var(--texto2); }
+.ayuda p { margin: 0 4px 14px; }
+.ayuda strong { color: var(--texto); font-weight: 600; }
+.ayuda ol { margin: 0 0 16px; padding-left: 24px; }
+.ayuda li { margin-bottom: 12px; padding-left: 4px; }
+.ayuda code {
+  display: block;
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg3);
+  color: var(--texto);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 /* ---------- Animación al cambiar de mes ---------- */
 

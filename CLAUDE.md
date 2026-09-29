@@ -29,7 +29,7 @@ subcarpeta: `https://usuario.github.io/mis-gastos/`. No se publica en la App Sto
 
 - `index.html` — marcado, metas de Apple, manifest, hojas modales.
 - `css/styles.css` — estilos (variables de color en `:root`).
-- `js/db.js` — capa IndexedDB (`movimientos`, `fotos`, `ajustes`).
+- `js/db.js` — capa IndexedDB (`movimientos`, `imagenes`, `ajustes`).
 - `js/app.js` — interfaz, formulario, gráfico SVG, compresión de fotos, respaldo.
 - `sw.js` — service worker (cache-first, caché versionado).
 - `manifest.json` — PWA standalone.
@@ -43,7 +43,7 @@ subcarpeta: `https://usuario.github.io/mis-gastos/`. No se publica en la App Sto
 - Fotos: store `imagenes` con `{ id, movId, orden, tipo, datos: ArrayBuffer }` (índice `movId`),
   hasta 10 por movimiento, JPEG de máx. 1200 px de lado y calidad 0.7.
 - Ajustes (store `ajustes`, `{ clave, valor }`): `presupuestos` (`{ categoria: centavos }`),
-  `ultimoRespaldo` (ms), `recordatorioPospuesto` (ms).
+  `ultimoRespaldo` (ms), `recordatorioPospuesto` (ms), `applePayOmitidos` (ids omitidos, máx. 300).
 - La v1 tenía una sola foto (store `fotos`, campo `tieneFoto`); `migrar()` en `js/db.js` la
   convierte a v2. **Nunca borrar esa migración**: puede haber datos v1 en el iPhone.
 - Respaldo JSON: `{ app: 'mis-gastos', formato: 2, exportado, presupuestos, movimientos: [...] }`,
@@ -59,6 +59,17 @@ estadísticas (promedio diario, proyección, mayor gasto, tasa de ahorro, dona p
 barras de 6 meses), presupuestos por categoría con aviso al superarlos, varias fotos por
 movimiento con visor en carrusel, duplicar movimiento, recordatorio de respaldo (7 días),
 exportar JSON/CSV con la hoja de compartir de iOS e importar respaldo.
+
+## Compras de Apple Pay
+
+Una web app no puede leer los pagos de Wallet. La persona usuaria crea en la app **Atajos** una
+automatización "Transacción" que copia al portapapeles una línea por compra:
+`MISGASTOS;<importe>;<AAAA-MM-DD HH:mm>;<comercio>` (el comercio va al final porque puede
+contener `;`). El botón de tarjeta de la barra superior lee el portapapeles (iOS pide confirmar
+"Pegar"), muestra cada compra pendiente y la guarda como gasto con un toque en la categoría.
+- id del movimiento: `ap-` + hash de importe, fecha y comercio → la misma compra no se duplica.
+- Categoría sugerida: la última usada en un gasto con la misma descripción (= comercio).
+- No cambiar el formato de la línea sin actualizar las instrucciones de la hoja `#hoja-ayuda-ap`.
 
 ## Probar en local
 

@@ -38,9 +38,14 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>
-      <button type="button" id="btn-ajustes" class="icono-btn barra-der" aria-label="Respaldo">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M7.5 7.5L12 3l4.5 4.5M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12"/></svg>
-      </button>
+      <div class="barra-der">
+        <button type="button" id="btn-applepay" class="icono-btn" aria-label="Registrar compra de Apple Pay">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 14.5h3.5"/></svg>
+        </button>
+        <button type="button" id="btn-ajustes" class="icono-btn" aria-label="Respaldo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M7.5 7.5L12 3l4.5 4.5M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12"/></svg>
+        </button>
+      </div>
     </header>
 
     <main id="contenido" class="contenido">
@@ -220,6 +225,81 @@
 
         <p class="nota">Tus datos solo existen en este iPhone. Exporta un respaldo con frecuencia y guárdalo en Archivos o iCloud Drive. El respaldo completo incluye las fotos; el CSV es solo para ver tus movimientos en Excel o Numbers. Al importar, los movimientos que ya existen no se duplican.</p>
         <p id="aj-version" class="nota centro"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja: clasificar compra de Apple Pay -->
+  <div id="hoja-applepay" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja hoja-corta">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <button type="button" class="texto-btn" data-cerrar>Cerrar</button>
+        <h2>Compra con Apple Pay</h2>
+        <span id="ap-contador" class="barra-contador"></span>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="ap-compra">
+          <div id="ap-monto" class="ap-monto">$0,00</div>
+          <div id="ap-comercio" class="ap-comercio"></div>
+          <div id="ap-fecha" class="ap-fecha"></div>
+        </div>
+        <div class="grupo-titulo">¿En qué lo gastaste?</div>
+        <div id="ap-categorias" class="categorias-grid"></div>
+        <div class="ap-acciones">
+          <button type="button" id="ap-editar" class="boton-sec">Editar antes de guardar</button>
+          <button type="button" id="ap-omitir" class="boton-sec rojo">Omitir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja: pegar compra manualmente / sin compras -->
+  <div id="hoja-pegar" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja hoja-corta">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <button type="button" class="texto-btn" data-cerrar>Cancelar</button>
+        <h2>Apple Pay</h2>
+        <span></span>
+      </div>
+      <div class="hoja-cuerpo">
+        <p id="pegar-mensaje" class="nota sin-sangria"></p>
+        <textarea id="pegar-texto" class="area-texto" rows="3" placeholder="Mantén presionado aquí y elige “Pegar”" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        <button type="button" id="pegar-procesar" class="boton-primario">Continuar</button>
+        <button type="button" id="pegar-ayuda" class="boton-sec ancho">Cómo configurar el atajo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja: instrucciones del atajo de Apple Pay -->
+  <div id="hoja-ayuda-ap" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <span></span>
+        <h2>Configurar Apple Pay</h2>
+        <button type="button" class="texto-btn fuerte" data-cerrar>Listo</button>
+      </div>
+      <div class="hoja-cuerpo ayuda">
+        <p>Apple no permite que las web apps lean tus pagos, pero la app <strong>Atajos</strong> sí. Este atajo copia cada compra y Mis Gastos la lee cuando tocas el botón de la tarjeta 💳. Necesitas iOS 17 o superior.</p>
+        <ol>
+          <li>Abre <strong>Atajos</strong> → pestaña <strong>Automatización</strong> → <strong>+</strong>.</li>
+          <li>Elige <strong>Transacción</strong>, selecciona tus tarjetas de Apple Pay, marca <strong>Ejecutar inmediatamente</strong> y toca <strong>Siguiente</strong> → <strong>Nuevo atajo en blanco</strong>.</li>
+          <li>Agrega la acción <strong>Formatear fecha</strong>: fecha = <em>Fecha actual</em>, formato <em>Personalizado</em>:
+            <code>yyyy-MM-dd HH:mm</code></li>
+          <li>Agrega la acción <strong>Texto</strong> y escribe exactamente (las partes entre corchetes son variables que eliges tocando el campo):
+            <code>MISGASTOS;[Importe];[Fecha formateada];[Comercio]</code>
+            <em>Importe</em> y <em>Comercio</em> salen de la <em>Entrada del atajo</em>.</li>
+          <li>Agrega <strong>Copiar al portapapeles</strong> con el Texto anterior.</li>
+          <li>Opcional: <strong>Mostrar notificación</strong> con “Abre Mis Gastos para clasificar la compra”.</li>
+        </ol>
+        <p><strong>Uso:</strong> después de pagar, abre Mis Gastos, toca 💳 y luego “Pegar”. Elige la categoría y listo. La app recuerda la categoría de cada comercio y no registra dos veces el mismo pago.</p>
+        <p><strong>Varias compras seguidas:</strong> si pagas varias veces antes de abrir la app, en el paso 4 escribe primero la variable <em>Portapapeles</em>, un salto de línea y luego el texto. Así se acumulan todas.</p>
+        <button type="button" id="ayuda-prueba" class="boton-sec ancho">Copiar una compra de prueba ($1,00)</button>
       </div>
     </div>
   </div>
