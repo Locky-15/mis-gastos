@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="verificando">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -42,8 +42,8 @@
         <button type="button" id="btn-applepay" class="icono-btn" aria-label="Registrar compra de Apple Pay">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 14.5h3.5"/></svg>
         </button>
-        <button type="button" id="btn-ajustes" class="icono-btn" aria-label="Respaldo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M7.5 7.5L12 3l4.5 4.5M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12"/></svg>
+        <button type="button" id="btn-ajustes" class="icono-btn" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         </button>
       </div>
     </header>
@@ -194,17 +194,30 @@
     </form>
   </div>
 
-  <!-- Hoja: respaldo -->
+  <!-- Hoja: ajustes y respaldo -->
   <div id="hoja-ajustes" class="hoja-contenedor" hidden>
     <div class="fondo" data-cerrar></div>
     <div class="hoja hoja-corta">
       <div class="hoja-barra">
         <span class="asa" aria-hidden="true"></span>
         <span></span>
-        <h2>Respaldo</h2>
+        <h2>Ajustes</h2>
         <button type="button" class="texto-btn fuerte" data-cerrar>Listo</button>
       </div>
       <div class="hoja-cuerpo">
+        <div class="grupo sin-margen">
+          <button type="button" class="campo fila-nav" id="aj-categorias">
+            <span class="campo-cat"><span class="mov-icono" style="background:#FF9F0A33">🏷️</span>Categorías</span>
+            <svg class="mov-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+          <button type="button" class="campo fila-nav" id="aj-bloqueo">
+            <span class="campo-cat"><span class="mov-icono" style="background:#30D15833">🔒</span>Bloqueo</span>
+            <span class="dato" id="aj-bloqueo-estado">Desactivado</span>
+            <svg class="mov-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <div class="grupo-titulo">Respaldo</div>
         <div class="grupo">
           <div class="campo"><span>Movimientos guardados</span><span id="aj-total" class="dato">—</span></div>
           <div class="campo"><span>Espacio usado</span><span id="aj-espacio" class="dato">—</span></div>
@@ -225,6 +238,105 @@
 
         <p class="nota">Tus datos solo existen en este iPhone. Exporta un respaldo con frecuencia y guárdalo en Archivos o iCloud Drive. El respaldo completo incluye las fotos; el CSV es solo para ver tus movimientos en Excel o Numbers. Al importar, los movimientos que ya existen no se duplican.</p>
         <p id="aj-version" class="nota centro"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja: lista de categorías -->
+  <div id="hoja-categorias" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <span></span>
+        <h2>Categorías</h2>
+        <button type="button" class="texto-btn fuerte" data-cerrar>Listo</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="segmentado" id="cat-tipo">
+          <button type="button" data-tipo="gasto" class="activo">Gastos</button>
+          <button type="button" data-tipo="ingreso">Ingresos</button>
+        </div>
+        <div class="grupo" id="cat-lista"></div>
+        <button type="button" id="cat-nueva" class="boton-sec ancho">+ Nueva categoría</button>
+        <p class="nota">Toca una categoría para cambiar su nombre, emoji o color, u ocultarla. Los movimientos que ya tienes no se modifican.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja: crear / editar categoría -->
+  <div id="hoja-cat-editar" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <form class="hoja" id="form-categoria" novalidate autocomplete="off">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <button type="button" class="texto-btn" data-cerrar>Cancelar</button>
+        <h2 id="ce-titulo">Nueva categoría</h2>
+        <button type="submit" class="texto-btn fuerte">Guardar</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="ce-vista">
+          <span id="ce-icono" class="mov-icono ce-icono">🏷️</span>
+          <span id="ce-vista-nombre" class="ce-vista-nombre">Nueva categoría</span>
+        </div>
+        <div class="grupo">
+          <label class="campo">
+            <span>Nombre</span>
+            <input id="ce-nombre" type="text" maxlength="24" placeholder="Ej.: Mascotas" enterkeyhint="done">
+          </label>
+          <label class="campo">
+            <span>Emoji</span>
+            <input id="ce-emoji" type="text" class="ce-emoji-input" placeholder="Otro emoji" enterkeyhint="done">
+          </label>
+        </div>
+        <div class="grupo-titulo">Emojis sugeridos</div>
+        <div id="ce-emojis" class="emojis-grid"></div>
+        <div class="grupo-titulo">Color</div>
+        <div id="ce-colores" class="colores-grid"></div>
+        <div class="grupo">
+          <div class="campo">
+            <span>Ocultar al registrar</span>
+            <label class="switch"><input type="checkbox" id="ce-oculta" role="switch"><span></span></label>
+          </div>
+        </div>
+        <p class="nota">Una categoría oculta no aparece al registrar movimientos, pero los que ya la usan se conservan y siguen contando en las estadísticas.</p>
+        <button type="button" id="ce-eliminar" class="boton-peligro" hidden>Eliminar categoría</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Hoja: ajustes de bloqueo -->
+  <div id="hoja-bloqueo" class="hoja-contenedor" hidden>
+    <div class="fondo" data-cerrar></div>
+    <div class="hoja hoja-corta">
+      <div class="hoja-barra">
+        <span class="asa" aria-hidden="true"></span>
+        <span></span>
+        <h2>Bloqueo</h2>
+        <button type="button" class="texto-btn fuerte" data-cerrar>Listo</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="grupo sin-margen">
+          <div class="campo">
+            <span>Pedir PIN al abrir</span>
+            <label class="switch"><input type="checkbox" id="bl-activo" role="switch"><span></span></label>
+          </div>
+          <div class="campo" id="bl-fila-faceid" hidden>
+            <span>Usar Face ID</span>
+            <label class="switch"><input type="checkbox" id="bl-faceid" role="switch"><span></span></label>
+          </div>
+        </div>
+        <div id="bl-opciones" hidden>
+          <div class="grupo-titulo">Volver a pedir al regresar después de</div>
+          <div class="segmentado" id="bl-espera">
+            <button type="button" data-ms="30000">30 s</button>
+            <button type="button" data-ms="60000">1 min</button>
+            <button type="button" data-ms="300000">5 min</button>
+            <button type="button" data-ms="900000">15 min</button>
+          </div>
+          <button type="button" id="bl-cambiar" class="boton-sec ancho">Cambiar PIN</button>
+        </div>
+        <p class="nota">El bloqueo evita que otra persona vea tus finanzas si toma tu iPhone, pero no cifra los datos. Con Face ID, iOS guarda una “llave de acceso” de Mis Gastos en tus contraseñas. Si olvidas el PIN y Face ID no funciona, solo queda borrar la app y restaurar un respaldo.</p>
       </div>
     </div>
   </div>
@@ -328,6 +440,44 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Aviso para deshacer una eliminación -->
+  <div id="deshacer" class="deshacer" role="status" hidden>
+    <span id="deshacer-texto">Movimiento eliminado</span>
+    <button type="button" id="deshacer-btn">Deshacer</button>
+  </div>
+
+  <!-- Pantalla de bloqueo (PIN / Face ID) -->
+  <div id="bloqueo" class="bloqueo" hidden>
+    <div class="bloqueo-caja">
+      <img src="icons/icon-180.png" alt="" class="bloqueo-icono">
+      <h2 id="bloqueo-titulo">Mis Gastos</h2>
+      <p id="bloqueo-sub" class="bloqueo-sub">Ingresa tu PIN</p>
+      <div id="bloqueo-puntos" class="bloqueo-puntos" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <div id="teclado" class="teclado">
+        <button type="button" data-d="1">1</button>
+        <button type="button" data-d="2">2</button>
+        <button type="button" data-d="3">3</button>
+        <button type="button" data-d="4">4</button>
+        <button type="button" data-d="5">5</button>
+        <button type="button" data-d="6">6</button>
+        <button type="button" data-d="7">7</button>
+        <button type="button" data-d="8">8</button>
+        <button type="button" data-d="9">9</button>
+        <button type="button" id="bloqueo-faceid" class="tecla-icono" aria-label="Usar Face ID">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9 16c1.6 1.3 4.4 1.3 6 0"/></svg>
+        </button>
+        <button type="button" data-d="0">0</button>
+        <button type="button" id="bloqueo-borrar" class="tecla-icono" aria-label="Borrar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/><path d="M12 9.5l5 5M17 9.5l-5 5"/></svg>
+        </button>
+      </div>
+      <div class="bloqueo-pie">
+        <button type="button" id="bloqueo-cancelar" class="texto-btn" hidden>Cancelar</button>
+        <button type="button" id="bloqueo-olvide" class="texto-btn" hidden>¿Olvidaste el PIN?</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/db.js"></script>
   <script src="js/app.js"></script>

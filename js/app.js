@@ -6,25 +6,37 @@
 (() => {
   // ---------- Configuración ----------
 
-  const CATEGORIAS = {
+  // Categorías de fábrica. El "id" nunca cambia porque es lo que guarda cada movimiento;
+  // nombre, emoji, color y "oculta" se personalizan en Ajustes → Categorías.
+  const CATEGORIAS_BASE = {
     gasto: [
-      { id: 'Comida', emoji: '🍔', color: '#FF9F0A' },
-      { id: 'Transporte', emoji: '🚌', color: '#0A84FF' },
-      { id: 'Casa', emoji: '🏠', color: '#BF5AF2' },
-      { id: 'Servicios', emoji: '💡', color: '#FFD60A' },
-      { id: 'Salud', emoji: '💊', color: '#FF453A' },
-      { id: 'Estudios', emoji: '📚', color: '#64D2FF' },
-      { id: 'Entretenimiento', emoji: '🎬', color: '#FF375F' },
-      { id: 'Compras', emoji: '🛍️', color: '#5E5CE6' },
-      { id: 'Otros', emoji: '📦', color: '#98989D' },
+      { id: 'Comida', nombre: 'Comida', emoji: '🍔', color: '#FF9F0A' },
+      { id: 'Transporte', nombre: 'Transporte', emoji: '🚌', color: '#0A84FF' },
+      { id: 'Casa', nombre: 'Casa', emoji: '🏠', color: '#BF5AF2' },
+      { id: 'Servicios', nombre: 'Servicios', emoji: '💡', color: '#FFD60A' },
+      { id: 'Salud', nombre: 'Salud', emoji: '💊', color: '#FF453A' },
+      { id: 'Estudios', nombre: 'Estudios', emoji: '📚', color: '#64D2FF' },
+      { id: 'Entretenimiento', nombre: 'Entretenimiento', emoji: '🎬', color: '#FF375F' },
+      { id: 'Compras', nombre: 'Compras', emoji: '🛍️', color: '#5E5CE6' },
+      { id: 'Otros', nombre: 'Otros', emoji: '📦', color: '#98989D' },
     ],
     ingreso: [
-      { id: 'Sueldo', emoji: '💼', color: '#30D158' },
-      { id: 'Ventas', emoji: '🏷️', color: '#0A84FF' },
-      { id: 'Regalo', emoji: '🎁', color: '#FF9F0A' },
-      { id: 'Otros', emoji: '💰', color: '#98989D' },
+      { id: 'Sueldo', nombre: 'Sueldo', emoji: '💼', color: '#30D158' },
+      { id: 'Ventas', nombre: 'Ventas', emoji: '🏷️', color: '#0A84FF' },
+      { id: 'Regalo', nombre: 'Regalo', emoji: '🎁', color: '#FF9F0A' },
+      { id: 'Otros', nombre: 'Otros', emoji: '💰', color: '#98989D' },
     ],
   };
+
+  const EMOJIS_SUGERIDOS = [
+    '🍔', '🛒', '☕', '🍺', '🍕', '🚌', '🚕', '⛽', '🚗', '🏠', '💡', '📱', '🌐', '💊', '🏥', '🐶',
+    '👶', '📚', '🎓', '🎬', '🎮', '🎵', '✈️', '🏖️', '🛍️', '👕', '💇', '🏋️', '🎁', '💼', '💰', '📦',
+  ];
+  const COLORES = [
+    '#FF453A', '#FF9F0A', '#FFD60A', '#30D158', '#66D4CF', '#64D2FF', '#0A84FF',
+    '#5E5CE6', '#BF5AF2', '#FF375F', '#AC8E68', '#98989D',
+  ];
+  const MAX_NOMBRE_CATEGORIA = 24;
 
   const FOTO_LADO_MAX = 1200;
   const FOTO_CALIDAD = 0.7;
@@ -63,7 +75,8 @@
     busquedaGlobal: false,
     busquedaToken: 0,
     listaMostrada: [],
-    presupuestos: {}, // { categoria: centavos }
+    presupuestos: {}, // { idCategoria: centavos }
+    categorias: null, // { gasto: [...], ingreso: [...] } (se asigna al iniciar)
   };
 
   const form = {
@@ -77,6 +90,7 @@
     cargaFotos: Promise.resolve(),
     sesion: 0,
     guardando: false,
+    firma: '', // estado al abrir, para avisar si hay cambios sin guardar
   };
 
   const exportacion = { archivo: null, tipo: null };
@@ -117,10 +131,89 @@
     return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
   }
 
+  // ---------- Categorías ----------
+
+  const copiarCategorias = c => ({ gasto: c.gasto.map(x => ({ ...x })), ingreso: c.ingreso.map(x => ({ ...x })) });
+  estado.categorias = copiarCategorias(CATEGORIAS_BASE);
+
+  const categoriasVisibles = tipo => estado.categorias[tipo].filter(c => !c.oculta);
+
   function infoCategoria(tipo, id) {
-    const lista = CATEGORIAS[tipo] || CATEGORIAS.gasto;
-    return lista.find(c => c.id === id) || { id, emoji: tipo === 'ingreso' ? '💰' : '📦', color: '#98989D' };
+    const lista = estado.categorias[tipo] || estado.categorias.gasto;
+    return lista.find(c => c.id === id)
+      || { id, nombre: id, emoji: tipo === 'ingreso' ? '💰' : '📦', color: '#98989D', oculta: true };
   }
+
+  const nombreCategoria = (tipo, id) => infoCategoria(tipo, id).nombre;
+
+  /** Primer carácter visible (un emoji puede ocupar varios códigos, p. ej. 🏋️ o banderas). */
+  function primerGrafema(texto) {
+    const s = String(texto || '').trim();
+    if (!s) return '';
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      const primero = new Intl.Segmenter('es', { granularity: 'grapheme' }).segment(s)[Symbol.iterator]().next();
+      return primero.done ? '' : primero.value.segment;
+    }
+    return Array.from(s)[0];
+  }
+
+  function limpiarCategoria(c, base) {
+    const nombre = typeof c.nombre === 'string' && c.nombre.trim()
+      ? c.nombre.trim().replace(/\s+/g, ' ').slice(0, MAX_NOMBRE_CATEGORIA)
+      : (base ? base.nombre : c.id);
+    return {
+      id: c.id,
+      nombre,
+      emoji: primerGrafema(c.emoji) || (base ? base.emoji : '🏷️'),
+      color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color.toUpperCase() : (base ? base.color : '#98989D'),
+      oculta: !!c.oculta,
+    };
+  }
+
+  /** Valida lo guardado; las de fábrica nunca desaparecen (solo se pueden ocultar). */
+  function normalizarCategorias(guardadas) {
+    const res = copiarCategorias(CATEGORIAS_BASE);
+    if (!guardadas || typeof guardadas !== 'object') return res;
+    for (const tipo of ['gasto', 'ingreso']) {
+      if (!Array.isArray(guardadas[tipo])) continue;
+      const lista = [];
+      const ids = new Set();
+      for (const c of guardadas[tipo]) {
+        if (!c || typeof c.id !== 'string' || !c.id || c.id.length > 64 || ids.has(c.id)) continue;
+        lista.push(limpiarCategoria(c, res[tipo].find(b => b.id === c.id)));
+        ids.add(c.id);
+      }
+      for (const b of res[tipo]) if (!ids.has(b.id)) lista.push({ ...b });
+      if (!lista.some(c => !c.oculta)) lista[0].oculta = false;
+      res[tipo] = lista;
+    }
+    return res;
+  }
+
+  /** Agrega las categorías de un respaldo que aquí no existen. Devuelve true si hubo cambios. */
+  function fusionarCategorias(deArchivo) {
+    if (!deArchivo || typeof deArchivo !== 'object') return false;
+    const archivo = normalizarCategorias(deArchivo);
+    let cambios = false;
+    for (const tipo of ['gasto', 'ingreso']) {
+      const locales = estado.categorias[tipo];
+      for (const c of archivo[tipo]) {
+        if (locales.some(l => l.id === c.id)) continue;
+        insertarCategoria(tipo, c);
+        cambios = true;
+      }
+    }
+    return cambios;
+  }
+
+  /** Las nuevas van antes de "Otros" para que "Otros" siga al final. */
+  function insertarCategoria(tipo, c) {
+    const lista = estado.categorias[tipo];
+    const iOtros = lista.findIndex(x => x.id === 'Otros');
+    if (iOtros === -1) lista.push(c); else lista.splice(iOtros, 0, c);
+  }
+
+  const guardarCategorias = () => DB.guardarAjuste('categorias', estado.categorias);
 
   /** Convierte lo escrito ("12,50", "12.50", "1.234,56", "$ 8") a centavos. */
   function parsearMonto(texto) {
@@ -288,7 +381,7 @@
     return lista.filter(m => {
       if (estado.filtroTipo !== 'todos' && m.tipo !== estado.filtroTipo) return false;
       if (!partes.length) return true;
-      const texto = normalizarTexto(`${m.categoria} ${m.descripcion || ''} ${centavosATexto(m.centavos)} ${dinero(m.centavos)}`);
+      const texto = normalizarTexto(`${nombreCategoria(m.tipo, m.categoria)} ${m.descripcion || ''} ${centavosATexto(m.centavos)} ${dinero(m.centavos)}`);
       return partes.every(p => texto.includes(p));
     });
   }
@@ -360,9 +453,9 @@
     const n = cuantasFotos(m);
     const fotos = n ? `${ICONO_CLIP}${n > 1 ? `<span class="mov-nfotos">${n}</span>` : ''}` : '';
     return `<button type="button" class="mov" data-id="${escapar(m.id)}">`
-      + `<span class="mov-icono" style="background:${c.color}33">${c.emoji}</span>`
+      + `<span class="mov-icono" style="background:${c.color}33">${escapar(c.emoji)}</span>`
       + '<span class="mov-info">'
-      + `<span class="mov-cat">${escapar(m.categoria)}${fotos}</span>`
+      + `<span class="mov-cat">${escapar(c.nombre)}${fotos}</span>`
       + (m.descripcion ? `<span class="mov-desc">${escapar(m.descripcion)}</span>` : '')
       + '</span>'
       + `<span class="mov-monto ${m.tipo}">${signo}${dinero(m.centavos)}</span>`
@@ -414,8 +507,9 @@
     }
 
     const mayor = gastos.reduce((a, m) => (!a || m.centavos > a.centavos ? m : a), null);
+    const catMayor = mayor ? nombreCategoria('gasto', mayor.categoria) : '';
     html += htmlStat('Mayor gasto', mayor ? dinero(mayor.centavos) : '—',
-      mayor ? escapar(mayor.descripcion ? `${mayor.categoria} · ${mayor.descripcion}` : mayor.categoria) : 'sin gastos');
+      mayor ? escapar(mayor.descripcion ? `${catMayor} · ${mayor.descripcion}` : catMayor) : 'sin gastos');
 
     if (totalI > 0) {
       const tasa = Math.round(((totalI - totalG) / totalI) * 100);
@@ -448,7 +542,7 @@
 
     const filas = [...porCategoria]
       .map(([cat, monto]) => ({ cat, monto, info: infoCategoria('gasto', cat), limite: estado.presupuestos[cat] || 0 }))
-      .sort((a, b) => b.monto - a.monto || a.cat.localeCompare(b.cat));
+      .sort((a, b) => b.monto - a.monto || a.info.nombre.localeCompare(b.info.nombre));
 
     // Gráfico de dona en SVG
     let svg = '';
@@ -496,8 +590,8 @@
         ancho = (f.monto / maximo) * 100;
       }
       leyenda += '<div class="cat-fila">'
-        + `<span class="mov-icono" style="background:${f.info.color}33">${f.info.emoji}</span>`
-        + `<span class="cat-nombre">${escapar(f.cat)}<span class="cat-pct">${pctTexto}</span></span>`
+        + `<span class="mov-icono" style="background:${f.info.color}33">${escapar(f.info.emoji)}</span>`
+        + `<span class="cat-nombre">${escapar(f.info.nombre)}<span class="cat-pct">${pctTexto}</span></span>`
         + `<span class="cat-monto${f.monto ? '' : ' cat-sin-gasto'}">${dinero(f.monto)}</span>`
         + `<span class="cat-barra"><span style="width:${ancho.toFixed(1)}%;background:${color}"></span></span>`
         + detalle
@@ -590,7 +684,8 @@
   }
 
   function hayModalAbierto() {
-    return ['#hoja-form', '#hoja-ajustes', '#hoja-presupuestos', '#hoja-applepay', '#hoja-pegar', '#hoja-ayuda-ap', '#visor', '#alerta']
+    return ['#hoja-form', '#hoja-ajustes', '#hoja-presupuestos', '#hoja-applepay', '#hoja-pegar', '#hoja-ayuda-ap',
+      '#hoja-categorias', '#hoja-cat-editar', '#hoja-bloqueo', '#bloqueo', '#visor', '#alerta']
       .some(s => !$(s).hidden);
   }
 
@@ -696,7 +791,16 @@
         renderFotosForm();
       }).catch(console.error);
     }
+    form.firma = firmaFormulario();
     mostrar($('#hoja-form'));
+  }
+
+  /** Resumen de lo editable del formulario; si cambia, hay cambios sin guardar. */
+  function firmaFormulario() {
+    return JSON.stringify([
+      form.tipo, $('#f-monto').value.trim(), form.categoria, $('#f-desc').value.trim(), $('#f-fecha').value,
+      form.fotos.filter(f => !f.existente).length, form.eliminarFotos.length,
+    ]);
   }
 
   function cerrarFormulario() {
@@ -705,26 +809,47 @@
     ocultar($('#hoja-form'), limpiarFotosForm);
   }
 
+  /** Cancelar, tocar fuera o deslizar hacia abajo: pregunta si hay cambios sin guardar. */
+  async function pedirCerrarFormulario() {
+    if (form.guardando || $('#hoja-form').hidden) return;
+    if (firmaFormulario() !== form.firma) {
+      if (document.activeElement) document.activeElement.blur();
+      const descartar = await confirmar({
+        titulo: '¿Descartar los cambios?',
+        mensaje: 'Lo que escribiste en este movimiento se perderá.',
+        aceptar: 'Descartar',
+        cancelar: 'Seguir editando',
+        destructivo: true,
+      });
+      if (!descartar) return;
+    }
+    cerrarFormulario();
+  }
+
   function ponerTipo(tipo) {
     form.tipo = tipo;
     for (const b of $('#f-tipo').children) b.classList.toggle('activo', b.dataset.tipo === tipo);
     const caja = $('#f-monto-caja');
     caja.classList.toggle('gasto', tipo === 'gasto');
     caja.classList.toggle('ingreso', tipo === 'ingreso');
-    if (form.categoria && !CATEGORIAS[tipo].some(c => c.id === form.categoria)) form.categoria = null;
+    if (form.categoria && !estado.categorias[tipo].some(c => c.id === form.categoria)) form.categoria = null;
     renderCategoriasForm();
   }
 
   function htmlChipCategoria(c, activo, claseExtra = '') {
     const estilo = activo ? ` style="border-color:${c.color};background:${c.color}22"` : '';
     return `<button type="button" class="cat-chip${activo ? ' activo' : ''}${claseExtra}" data-cat="${escapar(c.id)}"${estilo}>`
-      + `<span class="mov-icono" style="background:${c.color}33">${c.emoji}</span>${escapar(c.id)}</button>`;
+      + `<span class="mov-icono" style="background:${c.color}33">${escapar(c.emoji)}</span>${escapar(c.nombre)}</button>`;
   }
 
+  const claseColumnas = n => (n % 3 !== 0 && n % 4 === 0 ? 'cuatro' : '');
+
   function renderCategoriasForm() {
-    const lista = CATEGORIAS[form.tipo];
+    const lista = categoriasVisibles(form.tipo);
+    // Al editar un movimiento con una categoría oculta, se sigue mostrando para no perderla
+    if (form.categoria && !lista.some(c => c.id === form.categoria)) lista.push(infoCategoria(form.tipo, form.categoria));
     const grid = $('#f-categorias');
-    grid.classList.toggle('cuatro', lista.length === 4);
+    grid.classList.toggle('cuatro', claseColumnas(lista.length) === 'cuatro');
     grid.innerHTML = lista.map(c => htmlChipCategoria(c, c.id === form.categoria)).join('');
   }
 
@@ -846,8 +971,9 @@
     const limite = estado.presupuestos[mov.categoria];
     if (!limite) return null;
     const gastado = sumar(estado.movimientos, m => (m.tipo === 'gasto' && m.categoria === mov.categoria ? m.centavos : 0));
-    if (gastado > limite) return `⚠️ Te pasaste ${dinero(gastado - limite)} del presupuesto de ${mov.categoria}`;
-    if (gastado >= limite * 0.85) return `Llevas el ${Math.round((gastado / limite) * 100)} % del presupuesto de ${mov.categoria}`;
+    const nombre = nombreCategoria('gasto', mov.categoria);
+    if (gastado > limite) return `⚠️ Te pasaste ${dinero(gastado - limite)} del presupuesto de ${nombre}`;
+    if (gastado >= limite * 0.85) return `Llevas el ${Math.round((gastado / limite) * 100)} % del presupuesto de ${nombre}`;
     return null;
   }
 
@@ -926,29 +1052,68 @@
     $('#f-eliminar').hidden = true;
     $('#f-duplicar').hidden = true;
     $('.hoja-cuerpo', $('#hoja-form')).scrollTop = 0;
+    form.firma = firmaFormulario();
     toast('Copia lista: revisa y toca Guardar');
   }
 
+  // ---------- Eliminar con "Deshacer" ----------
+
+  const papelera = { mov: null, imagenes: [], timer: null };
+  const SEGUNDOS_DESHACER = 6;
+
+  /** Borra al instante y ofrece deshacer durante unos segundos (en vez de preguntar antes). */
   async function eliminarActual() {
-    const ok = await confirmar({
-      titulo: '¿Eliminar este movimiento?',
-      mensaje: form.fotos.length
-        ? `También se borrarán ${plural(form.fotos.length, 'foto', 'fotos')}. Esta acción no se puede deshacer.`
-        : 'Esta acción no se puede deshacer.',
-      aceptar: 'Eliminar',
-      destructivo: true,
-    });
-    if (!ok || !form.id) return;
+    if (!form.id || form.guardando) return;
+    const id = form.id;
+    form.guardando = true;
     try {
-      await DB.eliminar(form.id);
+      await form.cargaFotos;
+      const mov = await DB.obtener(id);
+      const imagenes = await DB.imagenesDe(id); // copia completa para poder restaurarlas
+      await DB.eliminar(id);
+      cerrarFormulario();
+      cargarMes();
+      if (mov) ofrecerDeshacer(mov, imagenes);
     } catch (err) {
       console.error(err);
+      form.guardando = false;
       alerta('No se pudo eliminar', String(err.message || err));
+    }
+  }
+
+  function ofrecerDeshacer(mov, imagenes) {
+    clearTimeout(papelera.timer);
+    papelera.mov = mov;
+    papelera.imagenes = imagenes;
+    $('#deshacer-texto').textContent = imagenes.length
+      ? `Eliminado con ${plural(imagenes.length, 'foto', 'fotos')}`
+      : 'Movimiento eliminado';
+    mostrar($('#deshacer'));
+    papelera.timer = setTimeout(vaciarPapelera, SEGUNDOS_DESHACER * 1000);
+  }
+
+  function vaciarPapelera() {
+    clearTimeout(papelera.timer);
+    papelera.mov = null;
+    papelera.imagenes = [];
+    const el = $('#deshacer');
+    if (!el.hidden) ocultar(el);
+  }
+
+  async function deshacerEliminar() {
+    const { mov, imagenes } = papelera;
+    if (!mov) return;
+    vaciarPapelera();
+    try {
+      await DB.guardar(mov, { nuevas: imagenes, eliminar: [] });
+    } catch (err) {
+      console.error(err);
+      alerta('No se pudo restaurar', String(err.message || err));
       return;
     }
-    cerrarFormulario();
-    toast('Movimiento eliminado');
-    cargarMes();
+    const [a, m] = mov.fecha.split('-').map(Number);
+    await ((a !== estado.anio || m - 1 !== estado.mes) ? irAMes(a, m - 1) : cargarMes());
+    toast('Movimiento restaurado');
   }
 
   // ---------- Visor de fotos (carrusel) ----------
@@ -957,7 +1122,7 @@
     if (!urls.length) return;
     const visor = $('#visor');
     const carrusel = $('#visor-carrusel');
-    visor.classList.remove('zoom');
+    reiniciarZoom();
     carrusel.innerHTML = urls.map(u => `<div class="visor-slide"><img src="${escapar(u)}" alt="Foto del ticket"></div>`).join('');
     mostrar(visor);
     carrusel.scrollLeft = indice * carrusel.clientWidth;
@@ -972,38 +1137,205 @@
     const total = carrusel.children.length;
     const i = Math.round(carrusel.scrollLeft / Math.max(1, carrusel.clientWidth));
     $('#visor-contador').textContent = total > 1 ? `${Math.min(total, i + 1)} / ${total}` : '';
-  }
-
-  function alternarZoom(img, e) {
-    const visor = $('#visor');
-    const slide = img.parentElement;
-    const r = img.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width;
-    const py = (e.clientY - r.top) / r.height;
-    const zoom = !slide.classList.contains('zoom');
-    slide.classList.toggle('zoom', zoom);
-    visor.classList.toggle('zoom', zoom);
-    if (zoom) {
-      requestAnimationFrame(() => {
-        slide.scrollLeft = px * img.offsetWidth - slide.clientWidth / 2;
-        slide.scrollTop = py * img.offsetHeight - slide.clientHeight / 2;
-      });
-    }
+    // Si se cambió de foto, la anterior vuelve a su tamaño
+    if (zoom.img && zoom.img.parentElement !== carrusel.children[i]) reiniciarZoom();
   }
 
   function cerrarVisor() {
-    ocultar($('#visor'), () => { $('#visor-carrusel').innerHTML = ''; });
+    ocultar($('#visor'), () => {
+      reiniciarZoom();
+      $('#visor-carrusel').innerHTML = '';
+    });
+  }
+
+  // ---------- Zoom del visor: pellizcar, arrastrar y doble toque ----------
+  // Se usa transform con origen en la esquina: pantalla = base + t + s · punto_local.
+
+  const ZOOM_MAX = 5;
+  const ZOOM_DOBLE = 2.5;
+  const zoom = { img: null, s: 1, tx: 0, ty: 0, gesto: null, toque: null, ultimoToque: null, ultimoTouchMs: 0 };
+
+  function reiniciarZoom() {
+    if (zoom.img) {
+      zoom.img.classList.remove('animando');
+      zoom.img.style.transform = '';
+    }
+    zoom.img = null;
+    zoom.s = 1;
+    zoom.tx = 0;
+    zoom.ty = 0;
+    zoom.gesto = null;
+    $('#visor').classList.remove('zoom');
+  }
+
+  function usarImagen(img) {
+    if (zoom.img !== img) {
+      reiniciarZoom();
+      zoom.img = img;
+    }
+  }
+
+  function aplicarZoom(animar) {
+    const img = zoom.img;
+    if (!img) return;
+    img.classList.toggle('animando', !!animar);
+    img.style.transform = zoom.s === 1 && !zoom.tx && !zoom.ty
+      ? ''
+      : `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.s})`;
+    $('#visor').classList.toggle('zoom', zoom.s > 1);
+  }
+
+  /** Mantiene la foto dentro de la pantalla (o centrada si es más chica). */
+  function limitarZoom() {
+    const img = zoom.img;
+    if (!img) return;
+    if (zoom.s <= 1.02) {
+      zoom.s = 1;
+      zoom.tx = 0;
+      zoom.ty = 0;
+      return;
+    }
+    zoom.s = Math.min(zoom.s, ZOOM_MAX);
+    const slide = img.parentElement;
+    const w = img.offsetWidth;
+    const h = img.offsetHeight;
+    const W = w * zoom.s;
+    const H = h * zoom.s;
+    const bx = img.offsetLeft;
+    const by = img.offsetTop;
+    zoom.tx = W > slide.clientWidth
+      ? Math.min(-bx, Math.max(slide.clientWidth - W - bx, zoom.tx))
+      : (w * (1 - zoom.s)) / 2;
+    zoom.ty = H > slide.clientHeight
+      ? Math.min(-by, Math.max(slide.clientHeight - H - by, zoom.ty))
+      : (h * (1 - zoom.s)) / 2;
+  }
+
+  /** Punto de la pantalla → coordenadas relativas a la esquina sin transformar de la foto. */
+  function puntoLocal(img, x, y) {
+    const r = img.parentElement.getBoundingClientRect();
+    return { x: x - r.left - img.offsetLeft, y: y - r.top - img.offsetTop };
+  }
+
+  function dobleToque(x, y) {
+    const img = zoom.img;
+    if (!img) return;
+    if (zoom.s > 1) {
+      zoom.s = 1;
+    } else {
+      const p = puntoLocal(img, x, y); // con s = 1 y t = 0, el punto local es directo
+      zoom.s = ZOOM_DOBLE;
+      zoom.tx = p.x - ZOOM_DOBLE * p.x;
+      zoom.ty = p.y - ZOOM_DOBLE * p.y;
+    }
+    limitarZoom();
+    aplicarZoom(true);
+  }
+
+  const distancia = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  const puntoMedio = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
+
+  function iniciarPellizco(img, t) {
+    const m = puntoMedio(t[0], t[1]);
+    const p = puntoLocal(img, m.x, m.y);
+    zoom.gesto = {
+      tipo: 'pellizco',
+      d0: Math.max(1, distancia(t[0], t[1])),
+      s0: zoom.s,
+      lx: (p.x - zoom.tx) / zoom.s, // punto de la foto que queda bajo los dedos
+      ly: (p.y - zoom.ty) / zoom.s,
+    };
+  }
+
+  function iniciarArrastre(t) {
+    zoom.gesto = { tipo: 'arrastre', x0: t.clientX, y0: t.clientY, tx0: zoom.tx, ty0: zoom.ty };
+  }
+
+  function alTocarVisor(e) {
+    zoom.ultimoTouchMs = Date.now();
+    const slide = e.target.closest('.visor-slide');
+    if (!slide) return;
+    const img = $('img', slide);
+    if (!img) return;
+    usarImagen(img);
+    const t = e.touches;
+    if (t.length === 2) {
+      e.preventDefault();
+      zoom.toque = null;
+      iniciarPellizco(img, t);
+    } else if (t.length === 1) {
+      zoom.toque = { x: t[0].clientX, y: t[0].clientY, t: Date.now() };
+      if (zoom.s > 1) iniciarArrastre(t[0]);
+      else zoom.gesto = null; // sin zoom: el carrusel se desliza normalmente
+    }
+  }
+
+  function alMoverVisor(e) {
+    const g = zoom.gesto;
+    const img = zoom.img;
+    if (!g || !img) return;
+    const t = e.touches;
+    if (g.tipo === 'pellizco' && t.length === 2) {
+      e.preventDefault();
+      const m = puntoMedio(t[0], t[1]);
+      const p = puntoLocal(img, m.x, m.y);
+      zoom.s = Math.max(0.8, Math.min(ZOOM_MAX * 1.2, g.s0 * (distancia(t[0], t[1]) / g.d0)));
+      zoom.tx = p.x - zoom.s * g.lx;
+      zoom.ty = p.y - zoom.s * g.ly;
+      aplicarZoom(false);
+    } else if (g.tipo === 'arrastre' && t.length === 1) {
+      e.preventDefault();
+      zoom.tx = g.tx0 + (t[0].clientX - g.x0);
+      zoom.ty = g.ty0 + (t[0].clientY - g.y0);
+      limitarZoom();
+      aplicarZoom(false);
+    }
+  }
+
+  function alSoltarVisor(e) {
+    zoom.ultimoTouchMs = Date.now();
+    const g = zoom.gesto;
+    if (g && g.tipo === 'pellizco' && e.touches.length < 2) {
+      limitarZoom();
+      aplicarZoom(true);
+      // Si queda un dedo y hay zoom, se sigue arrastrando con él
+      if (e.touches.length === 1 && zoom.s > 1) iniciarArrastre(e.touches[0]);
+      else zoom.gesto = null;
+      return;
+    }
+    if (e.touches.length === 0) zoom.gesto = null;
+
+    // Doble toque: dos toques cortos y cercanos
+    const toque = zoom.toque;
+    zoom.toque = null;
+    if (!toque || e.changedTouches.length !== 1) return;
+    const c = e.changedTouches[0];
+    const corto = Date.now() - toque.t < 250 && Math.hypot(c.clientX - toque.x, c.clientY - toque.y) < 12;
+    if (!corto) {
+      zoom.ultimoToque = null;
+      return;
+    }
+    const previo = zoom.ultimoToque;
+    if (previo && Date.now() - previo.t < 320 && Math.hypot(c.clientX - previo.x, c.clientY - previo.y) < 40) {
+      zoom.ultimoToque = null;
+      e.preventDefault(); // evita el "click" que cerraría el visor
+      dobleToque(c.clientX, c.clientY);
+    } else {
+      zoom.ultimoToque = { x: c.clientX, y: c.clientY, t: Date.now() };
+    }
   }
 
   // ---------- Presupuestos ----------
 
   function abrirPresupuestos() {
-    $('#lista-presupuestos').innerHTML = CATEGORIAS.gasto.map(c => {
+    // Visibles + las ocultas que aún tienen presupuesto (para poder quitárselo)
+    const lista = estado.categorias.gasto.filter(c => !c.oculta || estado.presupuestos[c.id]);
+    $('#lista-presupuestos').innerHTML = lista.map(c => {
       const v = estado.presupuestos[c.id];
       return '<label class="campo">'
-        + `<span class="campo-cat"><span class="mov-icono" style="background:${c.color}33">${c.emoji}</span>${escapar(c.id)}</span>`
+        + `<span class="campo-cat"><span class="mov-icono" style="background:${c.color}33">${escapar(c.emoji)}</span>${escapar(c.nombre)}</span>`
         + '<span class="prefijo">$</span>'
-        + `<input class="presupuesto" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Sin límite" data-cat="${escapar(c.id)}" value="${v ? centavosATexto(v) : ''}">`
+        + `<input class="presupuesto" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Sin límite" data-cat="${escapar(c.id)}" data-nombre="${escapar(c.nombre)}" value="${v ? centavosATexto(v) : ''}">`
         + '</label>';
     }).join('');
     actualizarTotalPresupuestos();
@@ -1034,7 +1366,7 @@
     e.preventDefault();
     const { res, invalido } = leerPresupuestosForm();
     if (invalido) {
-      toast(`Monto no válido en ${invalido.dataset.cat}`);
+      toast(`Monto no válido en ${invalido.dataset.nombre}`);
       invalido.focus();
       return;
     }
@@ -1155,7 +1487,8 @@
   }
 
   function sugeridaPara(compra) {
-    return compra.comercio ? applePay.sugerencias.get(claveComercio(compra.comercio)) || null : null;
+    const id = compra.comercio ? applePay.sugerencias.get(claveComercio(compra.comercio)) : null;
+    return id && categoriasVisibles('gasto').some(c => c.id === id) ? id : null;
   }
 
   function mostrarCompraApplePay() {
@@ -1166,7 +1499,10 @@
     $('#ap-comercio').textContent = c.comercio || 'Comercio sin nombre';
     $('#ap-fecha').textContent = capitalizar(etiquetaDia(c.fecha)) + (c.hora ? ` · ${c.hora}` : '');
     const sugerida = sugeridaPara(c);
-    $('#ap-categorias').innerHTML = CATEGORIAS.gasto
+    const lista = categoriasVisibles('gasto');
+    const grid = $('#ap-categorias');
+    grid.classList.toggle('cuatro', claseColumnas(lista.length) === 'cuatro');
+    grid.innerHTML = lista
       .map(cat => htmlChipCategoria(cat, cat.id === sugerida, cat.id === sugerida ? ' sugerida' : ''))
       .join('');
     $('.hoja-cuerpo', $('#hoja-applepay')).scrollTop = 0;
@@ -1184,7 +1520,7 @@
       });
       if (c.comercio) applePay.sugerencias.set(claveComercio(c.comercio), categoria);
       applePay.guardadas++;
-      siguienteCompra(`Guardado en ${categoria}`);
+      siguienteCompra(`Guardado en ${nombreCategoria('gasto', categoria)}`);
     } catch (err) {
       console.error(err);
       alerta('No se pudo guardar', 'Puede que el almacenamiento del iPhone esté lleno.');
@@ -1250,6 +1586,515 @@
     } catch (err) {
       alerta('No se pudo copiar', linea);
     }
+  }
+
+  // ---------- Editor de categorías ----------
+
+  const catEditor = { tipoLista: 'gasto', tipo: 'gasto', id: null, emoji: '🏷️', color: COLORES[0] };
+  const esPersonalizada = (tipo, id) => !CATEGORIAS_BASE[tipo].some(b => b.id === id);
+
+  function abrirCategorias() {
+    renderListaCategorias();
+    $('.hoja-cuerpo', $('#hoja-categorias')).scrollTop = 0;
+    mostrar($('#hoja-categorias'));
+  }
+
+  function renderListaCategorias() {
+    const tipo = catEditor.tipoLista;
+    for (const b of $('#cat-tipo').children) b.classList.toggle('activo', b.dataset.tipo === tipo);
+    $('#cat-lista').innerHTML = estado.categorias[tipo].map(c =>
+      `<button type="button" class="campo fila-nav${c.oculta ? ' cat-oculta' : ''}" data-id="${escapar(c.id)}">`
+      + `<span class="campo-cat"><span class="mov-icono" style="background:${c.color}33">${escapar(c.emoji)}</span>${escapar(c.nombre)}</span>`
+      + (c.oculta ? '<span class="dato">Oculta</span>' : '')
+      + ICONO_CHEVRON
+      + '</button>').join('');
+  }
+
+  function abrirEditorCategoria(id) {
+    const tipo = catEditor.tipoLista;
+    const c = id ? estado.categorias[tipo].find(x => x.id === id) : null;
+    const usados = new Set(estado.categorias[tipo].map(x => x.color));
+    catEditor.tipo = tipo;
+    catEditor.id = c ? c.id : null;
+    catEditor.emoji = c ? c.emoji : '🏷️';
+    catEditor.color = c ? c.color : COLORES.find(x => !usados.has(x)) || COLORES[0];
+    $('#ce-titulo').textContent = c ? 'Editar categoría' : 'Nueva categoría';
+    $('#ce-nombre').value = c ? c.nombre : '';
+    $('#ce-emoji').value = '';
+    $('#ce-oculta').checked = !!(c && c.oculta);
+    $('#ce-eliminar').hidden = !(c && esPersonalizada(tipo, c.id));
+    renderEditorCategoria();
+    $('.hoja-cuerpo', $('#hoja-cat-editar')).scrollTop = 0;
+    mostrar($('#hoja-cat-editar'));
+  }
+
+  function renderVistaCategoria() {
+    const icono = $('#ce-icono');
+    icono.textContent = catEditor.emoji;
+    icono.style.background = `${catEditor.color}33`;
+    $('#ce-vista-nombre').textContent = $('#ce-nombre').value.trim() || 'Nueva categoría';
+  }
+
+  function renderEditorCategoria() {
+    renderVistaCategoria();
+    $('#ce-emojis').innerHTML = EMOJIS_SUGERIDOS.map(e =>
+      `<button type="button" data-emoji="${e}"${e === catEditor.emoji ? ' class="activo"' : ''}>${e}</button>`).join('');
+    $('#ce-colores').innerHTML = COLORES.map(c =>
+      `<button type="button" data-color="${c}" style="--c:${c}"${c === catEditor.color ? ' class="activo"' : ''} aria-label="Color ${c}"></button>`).join('');
+  }
+
+  async function guardarCategoriaEditada(e) {
+    e.preventDefault();
+    const { tipo, id } = catEditor;
+    const lista = estado.categorias[tipo];
+    const nombre = $('#ce-nombre').value.trim().replace(/\s+/g, ' ').slice(0, MAX_NOMBRE_CATEGORIA);
+    if (!nombre) {
+      toast('Escribe un nombre para la categoría');
+      $('#ce-nombre').focus();
+      return;
+    }
+    if (lista.some(c => c.id !== id && normalizarTexto(c.nombre) === normalizarTexto(nombre))) {
+      toast('Ya existe una categoría con ese nombre');
+      return;
+    }
+    const oculta = $('#ce-oculta').checked;
+    if (oculta && !lista.some(c => c.id !== id && !c.oculta)) {
+      toast('Debe quedar al menos una categoría visible');
+      return;
+    }
+    const datos = { nombre, emoji: catEditor.emoji, color: catEditor.color, oculta };
+    const respaldo = copiarCategorias(estado.categorias);
+    if (id) Object.assign(lista.find(c => c.id === id), datos);
+    else insertarCategoria(tipo, { id: `c-${nuevoId().replace(/-/g, '').slice(0, 12)}`, ...datos });
+    try {
+      await guardarCategorias();
+    } catch (err) {
+      console.error(err);
+      estado.categorias = respaldo;
+      alerta('No se pudo guardar', String(err.message || err));
+      return;
+    }
+    if (document.activeElement) document.activeElement.blur();
+    ocultar($('#hoja-cat-editar'));
+    renderListaCategorias();
+    renderTodo();
+    toast(id ? 'Categoría actualizada' : 'Categoría creada');
+  }
+
+  async function eliminarCategoriaEditada() {
+    const { tipo, id } = catEditor;
+    if (!id || !esPersonalizada(tipo, id)) return;
+    let usos = 0;
+    try {
+      usos = (await DB.todos()).filter(m => m.tipo === tipo && m.categoria === id).length;
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    if (usos) {
+      alerta('No se puede eliminar',
+        `${usos === 1 ? 'La usa 1 movimiento' : `La usan ${usos} movimientos`}. Puedes ocultarla para que no aparezca al registrar.`);
+      return;
+    }
+    const ok = await confirmar({
+      titulo: '¿Eliminar esta categoría?',
+      mensaje: 'Ningún movimiento la usa.',
+      aceptar: 'Eliminar',
+      destructivo: true,
+    });
+    if (!ok) return;
+    estado.categorias[tipo] = estado.categorias[tipo].filter(c => c.id !== id);
+    if (!estado.categorias[tipo].some(c => !c.oculta)) estado.categorias[tipo][0].oculta = false;
+    try {
+      await guardarCategorias();
+      if (tipo === 'gasto' && estado.presupuestos[id]) {
+        delete estado.presupuestos[id];
+        await DB.guardarAjuste('presupuestos', estado.presupuestos);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    ocultar($('#hoja-cat-editar'));
+    renderListaCategorias();
+    renderTodo();
+    toast('Categoría eliminada');
+  }
+
+  // ---------- Bloqueo con PIN y Face ID ----------
+  // No cifra los datos: evita que otra persona vea la app en el iPhone.
+  // El PIN se guarda como SHA-256 con sal. Face ID usa WebAuthn: iOS crea una llave de
+  // acceso del dispositivo y solo la entrega tras verificar la cara (no hay servidor).
+
+  const ESPERAS = [30000, 60000, 300000, 900000];
+  const LARGO_PIN = 4;
+  const INTENTOS_ANTES_DE_ESPERAR = 5;
+  const seguridad = {
+    pinHash: null, sal: null, faceId: false, credId: null, espera: 60000,
+    bloqueada: false, ocultoDesde: 0, pausaHasta: 0, disponibleFaceId: false, fallos: 0, hasta: 0,
+  };
+  const teclado = { valor: '', resolver: null, intervalo: null, sub: '', mostrandoEspera: false };
+
+  const aBase64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+  const deBase64 = texto => Uint8Array.from(atob(texto), c => c.charCodeAt(0));
+  const faceIdListo = () => !!(seguridad.faceId && seguridad.credId && seguridad.disponibleFaceId);
+  const enEspera = () => seguridad.hasta > Date.now();
+
+  async function hashPin(pin, sal) {
+    const datos = new TextEncoder().encode(`mis-gastos:${sal}:${pin}`);
+    return aBase64(await crypto.subtle.digest('SHA-256', datos));
+  }
+
+  const pinCorrecto = async pin => !!seguridad.pinHash && (await hashPin(pin, seguridad.sal)) === seguridad.pinHash;
+
+  async function establecerPin(pin) {
+    seguridad.sal = aBase64(crypto.getRandomValues(new Uint8Array(16)));
+    seguridad.pinHash = await hashPin(pin, seguridad.sal);
+  }
+
+  function guardarSeguridad() {
+    return DB.guardarAjuste('bloqueo', seguridad.pinHash
+      ? { pinHash: seguridad.pinHash, sal: seguridad.sal, faceId: seguridad.faceId, credId: seguridad.credId, espera: seguridad.espera }
+      : null);
+  }
+
+  function guardarIntentos() {
+    return DB.guardarAjuste('bloqueoIntentos', { fallos: seguridad.fallos, hasta: seguridad.hasta }).catch(console.error);
+  }
+
+  async function faceIdDisponible() {
+    try {
+      if (!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return false;
+      return await Promise.race([
+        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(),
+        new Promise(r => setTimeout(() => r(false), 1500)),
+      ]);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /** Al abrir la app: si hay PIN, se muestra el bloqueo antes que cualquier dato. */
+  async function iniciarSeguridad() {
+    try {
+      const [cfg, intentos] = await Promise.all([DB.leerAjuste('bloqueo'), DB.leerAjuste('bloqueoIntentos')]);
+      if (cfg && cfg.pinHash && cfg.sal) {
+        seguridad.pinHash = cfg.pinHash;
+        seguridad.sal = cfg.sal;
+        seguridad.faceId = !!cfg.faceId;
+        seguridad.credId = cfg.credId || null;
+        seguridad.espera = ESPERAS.includes(cfg.espera) ? cfg.espera : 60000;
+      }
+      if (intentos) {
+        seguridad.fallos = Number(intentos.fallos) || 0;
+        seguridad.hasta = Number(intentos.hasta) || 0;
+      }
+      if (seguridad.pinHash) seguridad.disponibleFaceId = await faceIdDisponible();
+    } catch (err) {
+      console.error(err);
+    }
+    if (seguridad.pinHash) bloquear();
+    document.documentElement.classList.remove('verificando');
+    if (!seguridad.pinHash) {
+      faceIdDisponible().then(v => { seguridad.disponibleFaceId = v; renderAjustesBloqueo(); });
+    }
+    renderAjustesBloqueo();
+  }
+
+  function pintarPuntos() {
+    [...$('#bloqueo-puntos').children].forEach((p, i) => p.classList.toggle('lleno', i < teclado.valor.length));
+  }
+
+  function actualizarEspera() {
+    const esperando = enEspera();
+    $('#teclado').classList.toggle('en-espera', esperando);
+    const sub = $('#bloqueo-sub');
+    if (esperando) {
+      sub.textContent = `Demasiados intentos. Espera ${Math.ceil((seguridad.hasta - Date.now()) / 1000)} s`;
+      sub.classList.add('error');
+      teclado.mostrandoEspera = true;
+    } else if (teclado.mostrandoEspera) {
+      teclado.mostrandoEspera = false;
+      sub.textContent = teclado.sub; // al terminar la espera vuelve el texto normal, sin el error
+      sub.classList.remove('error');
+    }
+  }
+
+  /**
+   * Muestra el teclado y devuelve el PIN escrito, { faceId: true } o null si se cancela.
+   * sub: texto bajo el título (p. ej. el error); base: el texto normal a mostrar tras una espera.
+   */
+  function leerPin({ titulo, sub, base = sub, error = false, cancelable = false, faceId = false, olvide = false }) {
+    $('#bloqueo-titulo').textContent = titulo;
+    const subEl = $('#bloqueo-sub');
+    teclado.sub = base;
+    subEl.textContent = sub;
+    subEl.classList.toggle('error', error);
+    $('#bloqueo-cancelar').hidden = !cancelable;
+    $('#bloqueo-olvide').hidden = !olvide;
+    $('#bloqueo-faceid').style.visibility = faceId ? 'visible' : 'hidden';
+    teclado.valor = '';
+    pintarPuntos();
+    if (error) {
+      const puntos = $('#bloqueo-puntos');
+      puntos.classList.remove('error');
+      void puntos.offsetWidth;
+      puntos.classList.add('error');
+    }
+    const el = $('#bloqueo');
+    if (el.hidden || !el.classList.contains('abierta')) mostrar(el);
+    clearInterval(teclado.intervalo);
+    teclado.mostrandoEspera = false;
+    actualizarEspera();
+    teclado.intervalo = setInterval(actualizarEspera, 500);
+    return new Promise(resolve => { teclado.resolver = resolve; });
+  }
+
+  function responderTeclado(valor) {
+    const r = teclado.resolver;
+    teclado.resolver = null;
+    if (r) r(valor);
+  }
+
+  function cerrarTeclado() {
+    if (seguridad.bloqueada) return; // la pantalla de bloqueo no se cierra sin desbloquear
+    clearInterval(teclado.intervalo);
+    responderTeclado(null);
+    teclado.valor = '';
+    ocultar($('#bloqueo'));
+  }
+
+  function pulsarDigito(d) {
+    if (!teclado.resolver || enEspera() || teclado.valor.length >= LARGO_PIN) return;
+    teclado.valor += d;
+    pintarPuntos();
+    if (teclado.valor.length === LARGO_PIN) {
+      const valor = teclado.valor;
+      setTimeout(() => responderTeclado(valor), 120); // deja ver el último punto
+    }
+  }
+
+  function borrarDigito() {
+    if (!teclado.resolver) return;
+    teclado.valor = teclado.valor.slice(0, -1);
+    pintarPuntos();
+  }
+
+  function verificarFaceId() {
+    try {
+      return navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          allowCredentials: [{ type: 'public-key', id: deBase64(seguridad.credId), transports: ['internal'] }],
+          userVerification: 'required',
+          timeout: 60000,
+        },
+      }).then(c => !!c).catch(err => { console.warn(err); return false; });
+    } catch (err) {
+      return Promise.resolve(false);
+    }
+  }
+
+  function pulsarFaceId() {
+    if (!teclado.resolver || !faceIdListo()) return;
+    // Safari exige que WebAuthn se llame directamente en el toque, sin esperas antes
+    verificarFaceId().then(ok => {
+      if (ok) {
+        responderTeclado({ faceId: true });
+        return;
+      }
+      const sub = $('#bloqueo-sub');
+      sub.textContent = 'No se pudo verificar. Usa tu PIN';
+      sub.classList.add('error');
+    });
+  }
+
+  async function registrarFallo() {
+    seguridad.fallos++;
+    if (seguridad.fallos >= INTENTOS_ANTES_DE_ESPERAR) {
+      // 30 s, 60 s, 90 s… cuanto más se insiste
+      seguridad.hasta = Date.now() + 30000 * (seguridad.fallos - INTENTOS_ANTES_DE_ESPERAR + 1);
+    }
+    await guardarIntentos();
+    return 'PIN incorrecto';
+  }
+
+  async function bloquear() {
+    if (seguridad.bloqueada || !seguridad.pinHash) return;
+    seguridad.bloqueada = true;
+    responderTeclado(null); // cancela cualquier otro uso del teclado (p. ej. cambiar PIN)
+    if (document.activeElement) document.activeElement.blur();
+    let aviso = '';
+    for (;;) {
+      const r = await leerPin({
+        titulo: 'Mis Gastos', sub: aviso || 'Ingresa tu PIN', base: 'Ingresa tu PIN', error: !!aviso, faceId: faceIdListo(), olvide: true,
+      });
+      if (r && r.faceId) break;
+      if (typeof r !== 'string') continue;
+      if (await pinCorrecto(r)) break;
+      aviso = await registrarFallo();
+    }
+    seguridad.bloqueada = false;
+    seguridad.fallos = 0;
+    seguridad.hasta = 0;
+    guardarIntentos();
+    cerrarTeclado();
+  }
+
+  /** Pide PIN (o Face ID) antes de un cambio de seguridad. Deja el teclado abierto si acierta. */
+  async function verificarIdentidad(titulo) {
+    let aviso = '';
+    for (;;) {
+      const r = await leerPin({
+        titulo, sub: aviso || 'Ingresa tu PIN actual', base: 'Ingresa tu PIN actual', error: !!aviso, cancelable: true, faceId: faceIdListo(),
+      });
+      if (r === null) return false;
+      if (r.faceId || (typeof r === 'string' && await pinCorrecto(r))) {
+        seguridad.fallos = 0;
+        seguridad.hasta = 0;
+        guardarIntentos();
+        return true;
+      }
+      aviso = await registrarFallo();
+    }
+  }
+
+  /** Pide un PIN nuevo dos veces. Devuelve el PIN o null si se cancela. */
+  async function crearPin() {
+    let aviso = '';
+    for (;;) {
+      const p1 = await leerPin({ titulo: 'Crea un PIN', sub: aviso || `Elige ${LARGO_PIN} números que recuerdes`, error: !!aviso, cancelable: true });
+      if (p1 === null) return null;
+      const p2 = await leerPin({ titulo: 'Repite el PIN', sub: 'Escríbelo otra vez para confirmar', cancelable: true });
+      if (p2 === null) return null;
+      if (p1 === p2) return p1;
+      aviso = 'Los PIN no coinciden. Empieza de nuevo';
+    }
+  }
+
+  async function activarBloqueo() {
+    if (!(window.crypto && crypto.subtle)) {
+      alerta('No disponible', 'El bloqueo necesita abrir la app desde su dirección https.');
+      renderAjustesBloqueo();
+      return;
+    }
+    const pin = await crearPin();
+    if (!pin) {
+      cerrarTeclado();
+      renderAjustesBloqueo();
+      return;
+    }
+    try {
+      await establecerPin(pin);
+      seguridad.faceId = false;
+      seguridad.credId = null;
+      seguridad.fallos = 0;
+      seguridad.hasta = 0;
+      await guardarSeguridad();
+      guardarIntentos();
+    } catch (err) {
+      console.error(err);
+      seguridad.pinHash = null;
+      alerta('No se pudo activar el bloqueo', String(err.message || err));
+    }
+    cerrarTeclado();
+    renderAjustesBloqueo();
+    if (seguridad.pinHash) toast(seguridad.disponibleFaceId ? 'Bloqueo activado. Puedes activar Face ID abajo' : 'Bloqueo activado', 3200);
+  }
+
+  async function desactivarBloqueo() {
+    const ok = await verificarIdentidad('Desactivar bloqueo');
+    if (!ok) {
+      cerrarTeclado();
+      renderAjustesBloqueo();
+      return;
+    }
+    Object.assign(seguridad, { pinHash: null, sal: null, faceId: false, credId: null });
+    await guardarSeguridad().catch(console.error);
+    cerrarTeclado();
+    renderAjustesBloqueo();
+    toast('Bloqueo desactivado');
+  }
+
+  async function cambiarPin() {
+    if (!(await verificarIdentidad('Cambiar PIN'))) {
+      cerrarTeclado();
+      return;
+    }
+    const pin = await crearPin();
+    if (pin) {
+      await establecerPin(pin);
+      await guardarSeguridad().catch(console.error);
+      toast('PIN cambiado');
+    }
+    cerrarTeclado();
+  }
+
+  function activarFaceId(input) {
+    let promesa;
+    try {
+      // Se llama directo en el toque del interruptor (Safari lo exige)
+      promesa = navigator.credentials.create({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { name: 'Mis Gastos' },
+          user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'Mis Gastos', displayName: 'Mis Gastos' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+          timeout: 60000,
+          attestation: 'none',
+        },
+      });
+    } catch (err) {
+      promesa = Promise.reject(err);
+    }
+    promesa.then(async cred => {
+      seguridad.credId = aBase64(cred.rawId);
+      seguridad.faceId = true;
+      await guardarSeguridad();
+      renderAjustesBloqueo();
+      toast('Face ID activado');
+    }).catch(err => {
+      console.warn(err);
+      input.checked = false;
+      if (err && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        alerta('No se pudo activar Face ID', 'Revisa que Face ID esté configurado en el iPhone e inténtalo otra vez.');
+      }
+    });
+  }
+
+  async function desactivarFaceId() {
+    seguridad.faceId = false;
+    seguridad.credId = null;
+    await guardarSeguridad().catch(console.error);
+    renderAjustesBloqueo();
+    toast('Face ID desactivado');
+  }
+
+  function renderAjustesBloqueo() {
+    const activo = !!seguridad.pinHash;
+    $('#bl-activo').checked = activo;
+    $('#bl-fila-faceid').hidden = !activo || !seguridad.disponibleFaceId;
+    $('#bl-faceid').checked = faceIdListo();
+    $('#bl-opciones').hidden = !activo;
+    for (const b of $('#bl-espera').children) b.classList.toggle('activo', Number(b.dataset.ms) === seguridad.espera);
+    $('#aj-bloqueo-estado').textContent = !activo ? 'Desactivado' : faceIdListo() ? 'Face ID y PIN' : 'PIN';
+  }
+
+  /** Oculta los datos al salir de la app y pide el PIN al volver si pasó el tiempo elegido. */
+  function alCambiarVisibilidadSeguridad() {
+    if (!seguridad.pinHash) return;
+    const html = document.documentElement;
+    if (document.visibilityState === 'hidden') {
+      seguridad.ocultoDesde = Date.now();
+      html.classList.add('privado');
+      return;
+    }
+    const ahoraMs = Date.now();
+    // Elegir fotos o compartir un archivo también saca a la app del primer plano: no se bloquea por eso
+    const pausado = ahoraMs < seguridad.pausaHasta;
+    seguridad.pausaHasta = 0;
+    if (!pausado && seguridad.ocultoDesde && ahoraMs - seguridad.ocultoDesde >= seguridad.espera) bloquear();
+    html.classList.remove('privado');
   }
 
   // ---------- Recordatorio de respaldo ----------
@@ -1349,9 +2194,10 @@
     }
     const json = JSON.stringify({
       app: 'mis-gastos',
-      formato: 2,
+      formato: 3,
       exportado: new Date().toISOString(),
-      nota: 'Montos en centavos de USD. Fotos en base64 (data URL).',
+      nota: 'Montos en centavos de USD. Fotos en base64 (data URL). "categoria" es el id de la categoría.',
+      categorias: estado.categorias,
       presupuestos: estado.presupuestos,
       movimientos: salida,
     });
@@ -1373,7 +2219,7 @@
       filas.push([
         m.fecha,
         m.tipo === 'gasto' ? 'Gasto' : 'Ingreso',
-        m.categoria,
+        nombreCategoria(m.tipo, m.categoria),
         m.descripcion || '',
         (m.tipo === 'gasto' ? '-' : '') + centavosATexto(m.centavos),
         cuantasFotos(m),
@@ -1538,11 +2384,22 @@
 
     try {
       const r = await DB.importar(items);
+      // Categorías del respaldo (formato 3): si aquí nunca se personalizaron, se adoptan tal cual
+      // (útil al restaurar en un iPhone nuevo); si no, solo se agregan las que falten.
+      const catArchivo = datos && datos.categorias;
+      if (catArchivo && typeof catArchivo === 'object') {
+        if ((await DB.leerAjuste('categorias')) === undefined) {
+          estado.categorias = normalizarCategorias(catArchivo);
+          await guardarCategorias();
+        } else if (fusionarCategorias(catArchivo)) {
+          await guardarCategorias();
+        }
+      }
       if (importarPresupuestos) {
         const limpios = {};
         for (const [k, v] of Object.entries(presupuestosArchivo)) {
           const c = Math.round(Number(v));
-          if (CATEGORIAS.gasto.some(cat => cat.id === k) && c > 0 && c <= MAX_CENTAVOS) limpios[k] = c;
+          if (estado.categorias.gasto.some(cat => cat.id === k) && c > 0 && c <= MAX_CENTAVOS) limpios[k] = c;
         }
         await DB.guardarAjuste('presupuestos', limpios);
         estado.presupuestos = limpios;
@@ -1667,8 +2524,8 @@
 
     // Formulario
     const hojaForm = $('#hoja-form');
-    hojaForm.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) cerrarFormulario(); });
-    habilitarArrastre(hojaForm, cerrarFormulario);
+    hojaForm.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) pedirCerrarFormulario(); });
+    habilitarArrastre(hojaForm, pedirCerrarFormulario);
     $('#form-mov').addEventListener('submit', guardarFormulario);
     $('#f-tipo').addEventListener('click', e => {
       const b = e.target.closest('button[data-tipo]');
@@ -1702,6 +2559,7 @@
     });
     $('#f-duplicar').addEventListener('click', duplicarActual);
     $('#f-eliminar').addEventListener('click', eliminarActual);
+    $('#deshacer-btn').addEventListener('click', deshacerEliminar);
 
     // Presupuestos
     const hojaPres = $('#hoja-presupuestos');
@@ -1724,6 +2582,102 @@
     $('#aj-csv').addEventListener('click', () => prepararExportacion('csv'));
     $('#aj-compartir').addEventListener('click', compartirExportacion);
     $('#aj-importar').addEventListener('change', importarArchivo);
+    $('#aj-categorias').addEventListener('click', abrirCategorias);
+    $('#aj-bloqueo').addEventListener('click', () => {
+      renderAjustesBloqueo();
+      mostrar($('#hoja-bloqueo'));
+    });
+
+    // Categorías
+    const hojaCat = $('#hoja-categorias');
+    hojaCat.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) ocultar(hojaCat); });
+    habilitarArrastre(hojaCat, () => ocultar(hojaCat));
+    $('#cat-tipo').addEventListener('click', e => {
+      const b = e.target.closest('button[data-tipo]');
+      if (!b) return;
+      catEditor.tipoLista = b.dataset.tipo;
+      renderListaCategorias();
+    });
+    $('#cat-lista').addEventListener('click', e => {
+      const fila = e.target.closest('[data-id]');
+      if (fila) abrirEditorCategoria(fila.dataset.id);
+    });
+    $('#cat-nueva').addEventListener('click', () => abrirEditorCategoria(null));
+
+    const hojaCE = $('#hoja-cat-editar');
+    const cerrarCE = () => {
+      if (document.activeElement) document.activeElement.blur();
+      ocultar(hojaCE);
+    };
+    hojaCE.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) cerrarCE(); });
+    habilitarArrastre(hojaCE, cerrarCE);
+    $('#form-categoria').addEventListener('submit', guardarCategoriaEditada);
+    $('#form-categoria').addEventListener('keydown', soloCerrarTeclado);
+    $('#ce-nombre').addEventListener('input', renderVistaCategoria);
+    $('#ce-emoji').addEventListener('input', e => {
+      const g = primerGrafema(e.target.value);
+      if (!g) return;
+      catEditor.emoji = g;
+      e.target.value = '';
+      e.target.blur();
+      renderEditorCategoria();
+    });
+    $('#ce-emojis').addEventListener('click', e => {
+      const b = e.target.closest('[data-emoji]');
+      if (!b) return;
+      catEditor.emoji = b.dataset.emoji;
+      renderEditorCategoria();
+    });
+    $('#ce-colores').addEventListener('click', e => {
+      const b = e.target.closest('[data-color]');
+      if (!b) return;
+      catEditor.color = b.dataset.color;
+      renderEditorCategoria();
+    });
+    $('#ce-eliminar').addEventListener('click', eliminarCategoriaEditada);
+
+    // Bloqueo
+    const hojaBl = $('#hoja-bloqueo');
+    hojaBl.addEventListener('click', e => { if (e.target.closest('[data-cerrar]')) ocultar(hojaBl); });
+    habilitarArrastre(hojaBl, () => ocultar(hojaBl));
+    $('#bl-activo').addEventListener('change', e => {
+      if (e.target.checked) activarBloqueo(); else desactivarBloqueo();
+    });
+    $('#bl-faceid').addEventListener('change', e => {
+      if (e.target.checked) activarFaceId(e.target); else desactivarFaceId();
+    });
+    $('#bl-espera').addEventListener('click', e => {
+      const b = e.target.closest('button[data-ms]');
+      if (!b) return;
+      seguridad.espera = Number(b.dataset.ms);
+      guardarSeguridad().catch(console.error);
+      renderAjustesBloqueo();
+    });
+    $('#bl-cambiar').addEventListener('click', cambiarPin);
+    $('#teclado').addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.d) pulsarDigito(b.dataset.d);
+      else if (b.id === 'bloqueo-borrar') borrarDigito();
+      else if (b.id === 'bloqueo-faceid') pulsarFaceId();
+    });
+    $('#bloqueo-cancelar').addEventListener('click', () => responderTeclado(null));
+    $('#bloqueo-olvide').addEventListener('click', () => alerta('¿Olvidaste el PIN?', faceIdListo()
+      ? 'Entra con Face ID y luego cambia el PIN en Ajustes → Bloqueo.'
+      : 'Por seguridad no se puede recuperar. La única opción es borrar Mis Gastos de la pantalla de inicio, volver a instalarla y restaurar tu último respaldo.'));
+    document.addEventListener('keydown', e => {
+      if ($('#bloqueo').hidden || !teclado.resolver) return;
+      if (/^\d$/.test(e.key)) pulsarDigito(e.key);
+      else if (e.key === 'Backspace') borrarDigito();
+    });
+    // Elegir fotos, importar o compartir saca a la app del primer plano: no debe bloquearla
+    document.addEventListener('click', e => {
+      const etiqueta = e.target.closest('label');
+      if ((etiqueta && etiqueta.querySelector('input[type="file"]')) || e.target.closest('#aj-compartir')) {
+        seguridad.pausaHasta = Date.now() + 10 * 60000;
+      }
+    }, true);
+    document.addEventListener('visibilitychange', alCambiarVisibilidadSeguridad);
 
     // Apple Pay
     $('#btn-applepay').addEventListener('click', pegarCompraApplePay);
@@ -1758,11 +2712,24 @@
     // Visor
     const carrusel = $('#visor-carrusel');
     carrusel.addEventListener('scroll', actualizarContadorVisor, { passive: true });
+    carrusel.addEventListener('touchstart', alTocarVisor, { passive: false });
+    carrusel.addEventListener('touchmove', alMoverVisor, { passive: false });
+    carrusel.addEventListener('touchend', alSoltarVisor, { passive: false });
+    carrusel.addEventListener('touchcancel', () => { zoom.gesto = null; limitarZoom(); aplicarZoom(true); });
+    // Tocar fuera de la foto (sin zoom) cierra el visor
     carrusel.addEventListener('click', e => {
-      const img = e.target.closest('.visor-slide img');
-      if (img) alternarZoom(img, e);
-      else if (!$('#visor').classList.contains('zoom')) cerrarVisor();
+      if (!e.target.closest('.visor-slide img') && !$('#visor').classList.contains('zoom')) cerrarVisor();
     });
+    // Doble clic con mouse (en el iPhone se usa el doble toque de arriba)
+    carrusel.addEventListener('dblclick', e => {
+      if (Date.now() - zoom.ultimoTouchMs < 1000) return;
+      const img = e.target.closest('.visor-slide img');
+      if (!img) return;
+      usarImagen(img);
+      dobleToque(e.clientX, e.clientY);
+    });
+    // Evita el zoom de toda la página de Safari mientras se pellizca la foto
+    for (const tipo of ['gesturestart', 'gesturechange']) $('#visor').addEventListener(tipo, e => e.preventDefault());
     $('#visor-cerrar').addEventListener('click', cerrarVisor);
 
     // Alerta
@@ -1810,11 +2777,15 @@
   // ---------- Inicio ----------
 
   conectarEventos();
+  iniciarSeguridad();
   cambiarVista('lista');
   actualizarControlesBusqueda();
   renderEncabezado();
-  DB.leerAjuste('presupuestos')
-    .then(p => { estado.presupuestos = p && typeof p === 'object' ? p : {}; })
+  Promise.all([DB.leerAjuste('presupuestos'), DB.leerAjuste('categorias')])
+    .then(([p, c]) => {
+      estado.presupuestos = p && typeof p === 'object' ? p : {};
+      estado.categorias = normalizarCategorias(c);
+    })
     .catch(console.error)
     .finally(() => {
       cargarMes();

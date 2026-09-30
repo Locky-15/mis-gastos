@@ -42,13 +42,20 @@ subcarpeta: `https://usuario.github.io/mis-gastos/`. No se publica en la App Sto
   Los montos se guardan en **centavos enteros** para evitar errores de redondeo.
 - Fotos: store `imagenes` con `{ id, movId, orden, tipo, datos: ArrayBuffer }` (índice `movId`),
   hasta 10 por movimiento, JPEG de máx. 1200 px de lado y calidad 0.7.
-- Ajustes (store `ajustes`, `{ clave, valor }`): `presupuestos` (`{ categoria: centavos }`),
-  `ultimoRespaldo` (ms), `recordatorioPospuesto` (ms), `applePayOmitidos` (ids omitidos, máx. 300).
+- Ajustes (store `ajustes`, `{ clave, valor }`): `presupuestos` (`{ idCategoria: centavos }`),
+  `ultimoRespaldo` (ms), `recordatorioPospuesto` (ms), `applePayOmitidos` (ids omitidos, máx. 300),
+  `categorias`, `bloqueo`, `bloqueoIntentos` (ver abajo).
+- Categorías: `movimiento.categoria` guarda el **id** de la categoría, que nunca cambia. Las de
+  fábrica usan su nombre original como id ("Comida", "Sueldo"…); las personalizadas, `c-xxxxxxxxxxxx`.
+  El ajuste `categorias` = `{ gasto: [...], ingreso: [...] }` con `{ id, nombre, emoji, color, oculta }`.
+  Las de fábrica no se pueden borrar (solo ocultar); las personalizadas solo si ningún movimiento las usa.
+  Para mostrar una categoría usar siempre `infoCategoria()` / `nombreCategoria()`, nunca el id.
 - La v1 tenía una sola foto (store `fotos`, campo `tieneFoto`); `migrar()` en `js/db.js` la
   convierte a v2. **Nunca borrar esa migración**: puede haber datos v1 en el iPhone.
-- Respaldo JSON: `{ app: 'mis-gastos', formato: 2, exportado, presupuestos, movimientos: [...] }`,
-  cada movimiento con `fotos: [dataURL base64, ...]`. La importación también acepta el formato 1
-  (`foto`: una data URL o `null`). Se deduplica por `id` (solo se reemplaza si el del archivo
+- Respaldo JSON: `{ app: 'mis-gastos', formato: 3, exportado, categorias, presupuestos, movimientos: [...] }`,
+  cada movimiento con `fotos: [dataURL base64, ...]`. La importación también acepta los formatos 1
+  (`foto`: una data URL o `null`) y 2 (sin `categorias`). Las categorías del archivo que no existen
+  localmente se agregan. Se deduplica por `id` (solo se reemplaza si el del archivo
   tiene `actualizado` más reciente).
 - CSV (solo lectura en Excel/Numbers): separador `;`, decimales con coma, con BOM UTF-8.
 
@@ -57,8 +64,28 @@ subcarpeta: `https://usuario.github.io/mis-gastos/`. No se publica en la App Sto
 Vista por mes (deslizar o flechas), búsqueda y filtro por tipo (en el mes o en todos los meses),
 estadísticas (promedio diario, proyección, mayor gasto, tasa de ahorro, dona por categoría,
 barras de 6 meses), presupuestos por categoría con aviso al superarlos, varias fotos por
-movimiento con visor en carrusel, duplicar movimiento, recordatorio de respaldo (7 días),
+movimiento con visor en carrusel (con zoom), duplicar movimiento, eliminar con "Deshacer",
+categorías personalizables, bloqueo con PIN/Face ID, recordatorio de respaldo (7 días),
 exportar JSON/CSV con la hoja de compartir de iOS e importar respaldo.
+
+## Bloqueo (PIN / Face ID)
+
+- Es una barrera de privacidad, **no cifra** los datos. Ajuste `bloqueo` =
+  `{ pinHash, sal, faceId, credId, espera }` (o `null`): PIN de 4 dígitos guardado como
+  SHA-256(`mis-gastos:<sal>:<pin>`); Face ID con WebAuthn (llave de acceso de plataforma, sin servidor:
+  basta con que `navigator.credentials.get` resuelva). `bloqueoIntentos` = `{ fallos, hasta }`
+  (tras 5 fallos, espera creciente de 30 s).
+- Safari exige que `navigator.credentials.create/get` se llamen **directamente** en el manejador del
+  toque (sin `await` previos). No mover esas llamadas detrás de promesas.
+- `<html class="verificando">` oculta la app hasta saber si hay bloqueo; `html.privado` la oculta
+  mientras está en segundo plano. Elegir fotos/importar/compartir no dispara el bloqueo (`pausaHasta`).
+
+## Otros comportamientos
+
+- Eliminar un movimiento no pide confirmación: se borra y aparece "Deshacer" durante 6 s
+  (se guarda una copia del movimiento y sus fotos en memoria).
+- Cerrar el formulario con cambios sin guardar pide confirmación (`firmaFormulario()`).
+- Visor de fotos: pellizcar, arrastrar y doble toque con `transform` propio (Safari no hace zoom).
 
 ## Compras de Apple Pay
 
